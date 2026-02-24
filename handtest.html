@@ -353,14 +353,35 @@
         @media (max-width: 768px) {
             .trial-content {
                 flex-direction: column;
-                padding: 8px;
-                gap: 8px;
+                padding: 6px;
+                gap: 6px;
             }
-            .trial-panel { min-height: 42vh; }
-            .card { padding: 28px 20px; }
+            /* 참고 영상 패널: 작게 */
+            .trial-panel:first-child {
+                flex: 0 0 auto;
+                height: 28vh;
+                min-height: 0;
+            }
+            /* 카메라 패널: 크게 */
+            .trial-panel:last-child {
+                flex: 1 1 0;
+                min-height: 0;
+            }
+            /* 진행 도트 컴팩트 */
+            .progress-dots { padding: 6px 16px; }
+            /* 헤더 컴팩트 */
+            .header { padding: 8px 12px; }
+            .header-title { font-size: 14px; }
+            /* 패널 헤더 컴팩트 */
+            .panel-header { padding: 6px 12px; }
+            .panel-title { font-size: 13px; }
+            /* 버튼 컴팩트 */
+            .panel-controls { padding: 8px 12px; }
+            .btn { padding: 9px 20px; font-size: 14px; }
+            /* 카드 */
+            .card { padding: 24px 16px; }
             .card h1 { font-size: 20px; }
             .hand-select-group { gap: 12px; }
-            .header { padding: 10px 16px; }
         }
 
         /* Instruction list */
