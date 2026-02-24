@@ -28,7 +28,8 @@
             font-family: 'Noto Sans KR', sans-serif;
             background: var(--bg);
             color: var(--text);
-            min-height: 100dvh;
+            height: 100dvh;
+            overflow: hidden;
             display: flex;
             flex-direction: column;
         }
@@ -69,6 +70,8 @@
             align-items: center;
             justify-content: center;
             padding: 32px 24px;
+            overflow-y: auto;
+            min-height: 0;
         }
         .screen.active { display: flex; }
 
@@ -158,7 +161,8 @@
             flex: 1;
             flex-direction: column;
             width: 100%;
-            height: 100%;
+            min-height: 0;
+            overflow: hidden;
         }
         .trial-container.active { display: flex; }
 
@@ -362,6 +366,48 @@
             line-height: 1.6;
         }
 
+        /* Help button in header */
+        .btn-help {
+            margin-left: auto;
+            background: #eff6ff;
+            border: 1.5px solid #bfdbfe;
+            color: var(--primary);
+            border-radius: 8px;
+            padding: 5px 14px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex; align-items: center; gap: 5px;
+            transition: background 0.15s;
+        }
+        .btn-help:hover { background: #dbeafe; }
+
+        /* Instructions Modal */
+        .modal-backdrop {
+            position: fixed; inset: 0;
+            background: rgba(15,23,42,0.5);
+            display: flex; align-items: center; justify-content: center;
+            z-index: 500;
+            padding: 24px;
+        }
+        .modal-backdrop.hidden { display: none; }
+        .modal-box {
+            background: var(--surface);
+            border-radius: var(--radius);
+            box-shadow: 0 8px 40px rgba(0,0,0,0.18);
+            padding: 36px 36px 28px;
+            max-width: 520px;
+            width: 100%;
+            text-align: center;
+            max-height: 90dvh;
+            overflow-y: auto;
+        }
+        .modal-box h2 { font-size: 20px; font-weight: 700; margin-bottom: 16px; }
+        .modal-box p { font-size: 15px; color: var(--text-secondary); line-height: 1.7; margin-bottom: 16px; }
+        .modal-close-row {
+            display: flex; justify-content: center; margin-top: 20px; gap: 10px;
+        }
+
         /* Next trial overlay */
         .next-overlay {
             position: absolute; inset: 0;
@@ -387,7 +433,8 @@
 <div class="header">
     <div class="header-icon">H</div>
     <div class="header-title">Hand CAPTCHA 실험</div>
-    <div class="header-progress" id="headerProgress"></div>
+    <button class="btn-help" onclick="openInstructions()">❓ 실험 안내</button>
+    <div class="header-progress" id="headerProgress" style="margin-left:12px;"></div>
 </div>
 
 <!-- Screen 1: Start -->
@@ -396,20 +443,20 @@
         <h1>👋 손 동작 인식 실험</h1>
         <p class="subtitle">인간과 AI의 가려진 손 추정 능력 비교 연구</p>
         <p>본 실험에 참여해 주셔서 감사합니다.<br>
-        시작 버튼을 누르면 실험에 대한 안내가 표시됩니다.</p>
+        시작 버튼을 누르면 실험 안내가 팝업으로 표시됩니다.</p>
         <br>
-        <button class="btn btn-primary btn-lg" onclick="showScreen('screenInstructions')">시작하기</button>
+        <button class="btn btn-primary btn-lg" onclick="openInstructionsFromStart()">시작하기</button>
     </div>
 </div>
 
-<!-- Screen 2: Instructions -->
-<div class="screen" id="screenInstructions">
-    <div class="card">
+<!-- Instructions Modal (팝업) -->
+<div class="modal-backdrop hidden" id="instructionsModal">
+    <div class="modal-box">
         <h2>실험 안내</h2>
-        <p>본 실험은 <strong>인간과 AI의 가려진 손 추정 능력을 비교</strong>하기 위해 진행되며, 소요 시간은 약 <strong>2~3분</strong>입니다.</p>
+        <p>본 실험은 <strong>인간과 AI의 가려진 손 추정 능력을 비교</strong>하기 위해 진행되며, 소요 시간은 약 <strong>2분</strong>입니다.</p>
         <ol class="instruction-steps">
             <li>제시되는 <strong>5~6초 분량의 일부가 가려진 손 동작 영상</strong>을 봅니다.</li>
-            <li>따라할 준비가 되었다면 <strong>'따라하기'</strong> 버튼을 클릭합니다.</li>
+            <li>영상에 제시된 <strong>일부가 가려진 손 동작을</strong> 따라할 준비가 되었다면 <strong>'따라하기'</strong> 버튼을 클릭합니다.</li>
             <li>카메라에 손이 인식되면 <strong>자동으로 기록이 시작</strong>됩니다.</li>
             <li>제시된 영상의 손 동작을 <strong>최대한 비슷하게</strong> 따라하세요.</li>
             <li>동작을 끝낸 후 <strong>'따라하기 종료'</strong> 버튼을 눌러주세요.</li>
@@ -418,12 +465,13 @@
         <div class="info-box">
             ℹ️ 카메라 접근 권한이 필요합니다. 권한 요청 시 '허용'을 선택해 주세요.
         </div>
-        <br>
-        <button class="btn btn-primary btn-lg" onclick="showScreen('screenHandSelect')">다음</button>
+        <div class="modal-close-row">
+            <button class="btn btn-primary" id="modalConfirmBtn" onclick="closeInstructions()">확인</button>
+        </div>
     </div>
 </div>
 
-<!-- Screen 3: Hand Selection -->
+<!-- Screen 3 (구 Screen 2): Hand Selection -->
 <div class="screen" id="screenHandSelect">
     <div class="card">
         <h2>주손 선택</h2>
@@ -582,6 +630,29 @@ refVideo.addEventListener('timeupdate', () => {
         videoTime.textContent = `${formatTime(refVideo.currentTime)} / ${formatTime(refVideo.duration)}`;
     }
 });
+
+// ===== INSTRUCTIONS MODAL =====
+let instructionsFromStart = false;
+
+function openInstructionsFromStart() {
+    instructionsFromStart = true;
+    document.getElementById('modalConfirmBtn').textContent = '다음 →';
+    document.getElementById('instructionsModal').classList.remove('hidden');
+}
+
+function openInstructions() {
+    instructionsFromStart = false;
+    document.getElementById('modalConfirmBtn').textContent = '확인';
+    document.getElementById('instructionsModal').classList.remove('hidden');
+}
+
+function closeInstructions() {
+    document.getElementById('instructionsModal').classList.add('hidden');
+    if (instructionsFromStart) {
+        instructionsFromStart = false;
+        showScreen('screenHandSelect');
+    }
+}
 
 // ===== SCREEN NAVIGATION =====
 function showScreen(id) {
@@ -815,6 +886,10 @@ function startRecording() {
     isWaitingForHand = true;
     btnRecord.disabled = true;
     setStatus('detecting', '손을 카메라에 보여주세요... 인식 대기 중');
+
+    // Restart video from the beginning
+    refVideo.currentTime = 0;
+    refVideo.play().catch(e => console.warn('Video play failed:', e));
 
     // If hand is already detected, it will start immediately in onMediaPipeResults
     if (lastLandmarks) {
