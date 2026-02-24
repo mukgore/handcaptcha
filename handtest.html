@@ -356,14 +356,8 @@
                 padding: 6px;
                 gap: 6px;
             }
-            /* 참고 영상 패널: 작게 */
-            .trial-panel:first-child {
-                flex: 0 0 auto;
-                height: 28vh;
-                min-height: 0;
-            }
-            /* 카메라 패널: 크게 */
-            .trial-panel:last-child {
+            /* 두 패널 동일 크기 */
+            .trial-panel {
                 flex: 1 1 0;
                 min-height: 0;
             }
@@ -590,13 +584,10 @@
                 영상을 보고 준비되면 '따라하기' 버튼을 누르세요
             </div>
             <div class="panel-controls">
-                <button class="btn btn-outline" id="btnCamToggle" onclick="toggleCamera()">
-                    🔄 카메라 전환
-                </button>
                 <button class="btn btn-primary" id="btnRecord" onclick="startRecording()">
                     ▶ 따라하기
                 </button>
-                <button class="btn btn-danger" id="btnStop" onclick="stopRecording()" disabled>
+                <button class="btn btn-danger" id="btnStop" onclick="stopRecording()" disabled style="display:none;">
                     ■ 따라하기 종료
                 </button>
             </div>
