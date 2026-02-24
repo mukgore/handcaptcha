@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>GT Landmark Extractor</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js" crossorigin="anonymous"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; padding: 24px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        h1 { text-align: center; margin-bottom: 8px; }
+        .subtitle { text-align: center; color: #666; margin-bottom: 24px; font-size: 14px; }
+        .card { background: white; border-radius: 12px; padding: 24px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+        .btn { padding: 10px 24px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+        .btn-primary { background: #2563eb; color: white; }
+        .btn-primary:hover { background: #1d4ed8; }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-success { background: #16a34a; color: white; }
+        input[type="file"] { margin: 8px 0; }
+        .progress { margin: 16px 0; }
+        .progress-bar { height: 24px; background: #e5e7eb; border-radius: 12px; overflow: hidden; }
+        .progress-fill { height: 100%; background: #2563eb; transition: width 0.1s; display: flex; align-items: center; justify-content: center; color: white; font-size: 12px; font-weight: 600; }
+        .status { margin: 8px 0; font-size: 13px; color: #555; }
+        .result-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #eee; }
+        .result-item:last-child { border: none; }
+        .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+        .tag-ok { background: #dcfce7; color: #166534; }
+        .tag-warn { background: #fef3c7; color: #92400e; }
+        video, canvas { display: none; }
+        #log { max-height: 200px; overflow-y: auto; font-family: monospace; font-size: 12px; background: #1e293b; color: #94a3b8; padding: 12px; border-radius: 8px; margin-top: 12px; }
+        #log .ok { color: #4ade80; }
+        #log .info { color: #60a5fa; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🎯 GT Landmark Extractor</h1>
+    <p class="subtitle">원본(baseline) 영상에서 MediaPipe 랜드마크 추출 → JSON 저장</p>
+
+    <div class="card">
+        <h3>1. 원본 영상 선택</h3>
+        <p style="font-size:13px; color:#666; margin: 8px 0;">l1~l3, r1~r3 baseline 영상 파일을 모두 선택하세요 (복수 선택 가능)</p>
+        <input type="file" id="videoInput" accept="video/mp4" multiple>
+    </div>
+
+    <div class="card">
+        <h3>2. 추출 실행</h3>
+        <button class="btn btn-primary" id="btnExtract" onclick="startExtraction()" disabled>추출 시작</button>
+        <div class="progress" style="display:none" id="progressArea">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill" style="width:0%">0%</div>
+            </div>
+            <div class="status" id="statusText">준비 중...</div>
+        </div>
+    </div>
+
+    <div class="card" id="resultsCard" style="display:none">
+        <h3>3. 결과</h3>
+        <div id="resultsList"></div>
+        <br>
+        <button class="btn btn-success" onclick="downloadAll()">📥 전체 GT 데이터 다운로드 (JSON)</button>
+    </div>
+
+    <div id="log"></div>
+</div>
+
+<video id="hiddenVideo" muted></video>
+<canvas id="hiddenCanvas"></canvas>
+
+<script>
+const videoInput = document.getElementById('videoInput');
+const btnExtract = document.getElementById('btnExtract');
+const progressArea = document.getElementById('progressArea');
+const progressFill = document.getElementById('progressFill');
+const statusText = document.getElementById('statusText');
+const resultsCard = document.getElementById('resultsCard');
+const resultsList = document.getElementById('resultsList');
+const logDiv = document.getElementById('log');
+const hiddenVideo = document.getElementById('hiddenVideo');
+const hiddenCanvas = document.getElementById('hiddenCanvas');
+const ctx = hiddenCanvas.getContext('2d');
+
+let hands = null;
+let allGTData = {};
+let selectedFiles = [];
+
+videoInput.addEventListener('change', (e) => {
+    selectedFiles = Array.from(e.target.files);
+    btnExtract.disabled = selectedFiles.length === 0;
+    log(`${selectedFiles.length}개 파일 선택됨`, 'info');
+});
+
+function log(msg, type = '') {
+    const span = document.createElement('div');
+    span.className = type;
+    span.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+    logDiv.appendChild(span);
+    logDiv.scrollTop = logDiv.scrollHeight;
+}
+
+async function initMediaPipe() {
+    log('MediaPipe 초기화 중...');
+    hands = new Hands({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${file}`
+    });
+    hands.setOptions({
+        maxNumHands: 1,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5
+    });
+
+    return new Promise((resolve) => {
+        let resolved = false;
+        hands.onResults(() => {
+            if (!resolved) { resolved = true; resolve(); }
+        });
+        // Send dummy frame to trigger init
+        const dummyCanvas = document.createElement('canvas');
+        dummyCanvas.width = 100; dummyCanvas.height = 100;
+        hands.send({ image: dummyCanvas }).then(() => {
+            if (!resolved) { resolved = true; resolve(); }
+        });
+    });
+}
+
+async function extractFromVideo(file) {
+    return new Promise((resolve) => {
+        const url = URL.createObjectURL(file);
+        hiddenVideo.src = url;
+        hiddenVideo.currentTime = 0;
+
+        hiddenVideo.onloadedmetadata = async () => {
+            const duration = hiddenVideo.duration;
+            const fps = 30; // MediaPipe 웹 실험과 동일한 추출 속도
+            const totalFrames = Math.floor(duration * fps);
+
+            hiddenCanvas.width = hiddenVideo.videoWidth;
+            hiddenCanvas.height = hiddenVideo.videoHeight;
+
+            log(`  ${file.name}: ${hiddenVideo.videoWidth}x${hiddenVideo.videoHeight}, ${duration.toFixed(1)}s, ~${totalFrames}fr`);
+
+            const landmarks = [];
+            let detected = 0;
+            let frameIdx = 0;
+
+            // 프레임별로 seek해서 추출
+            for (let t = 0; t < duration; t += 1/fps) {
+                hiddenVideo.currentTime = t;
+
+                // seek 완료 대기
+                await new Promise(r => {
+                    hiddenVideo.onseeked = r;
+                });
+
+                // 프레임 그리기
+                ctx.drawImage(hiddenVideo, 0, 0);
+
+                // MediaPipe 처리
+                const result = await new Promise(r => {
+                    let done = false;
+                    hands.onResults((res) => {
+                        if (!done) { done = true; r(res); }
+                    });
+                    hands.send({ image: hiddenCanvas });
+                });
+
+                if (result.multiHandLandmarks && result.multiHandLandmarks.length > 0) {
+                    const lm = result.multiHandLandmarks[0];
+                    landmarks.push({
+                        frame: frameIdx,
+                        time: t,
+                        landmarks: lm.map(l => [
+                            Math.round(l.x * 100000) / 100000,
+                            Math.round(l.y * 100000) / 100000,
+                            Math.round(l.z * 100000) / 100000
+                        ]),
+                        handedness: result.multiHandedness?.[0]?.label || 'Unknown'
+                    });
+                    detected++;
+                } else {
+                    landmarks.push({
+                        frame: frameIdx,
+                        time: t,
+                        landmarks: null,
+                        handedness: null
+                    });
+                }
+
+                frameIdx++;
+
+                // 진행률 업데이트 (현재 파일 내)
+                const fileProgress = Math.round((t / duration) * 100);
+                statusText.textContent = `${file.name}: ${frameIdx}/${totalFrames}fr (${detected} detected)`;
+            }
+
+            URL.revokeObjectURL(url);
+
+            resolve({
+                filename: file.name,
+                videoWidth: hiddenVideo.videoWidth,
+                videoHeight: hiddenVideo.videoHeight,
+                duration: duration,
+                fps: fps,
+                totalFrames: frameIdx,
+                detectedFrames: detected,
+                detectionRate: (detected / Math.max(frameIdx, 1) * 100).toFixed(1),
+                landmarks: landmarks
+            });
+        };
+    });
+}
+
+async function startExtraction() {
+    btnExtract.disabled = true;
+    progressArea.style.display = 'block';
+    allGTData = {};
+
+    // Init MediaPipe
+    if (!hands) {
+        await initMediaPipe();
+        log('MediaPipe 준비 완료', 'ok');
+    }
+
+    for (let i = 0; i < selectedFiles.length; i++) {
+        const file = selectedFiles[i];
+        const overallProgress = Math.round((i / selectedFiles.length) * 100);
+        progressFill.style.width = overallProgress + '%';
+        progressFill.textContent = `${i+1}/${selectedFiles.length}`;
+
+        log(`처리 중: ${file.name}`, 'info');
+        const result = await extractFromVideo(file);
+
+        // 파일명에서 키 추출 (예: l3_baseline_original.mp4 → l3)
+        const key = file.name.replace('_baseline_original.mp4', '').replace('.mp4', '');
+        allGTData[key] = result;
+
+        log(`  ✅ ${result.detectedFrames}/${result.totalFrames} frames detected (${result.detectionRate}%)`, 'ok');
+    }
+
+    progressFill.style.width = '100%';
+    progressFill.textContent = '완료!';
+    statusText.textContent = '모든 영상 처리 완료';
+
+    // 결과 표시
+    showResults();
+}
+
+function showResults() {
+    resultsCard.style.display = 'block';
+    resultsList.innerHTML = '';
+
+    for (const [key, data] of Object.entries(allGTData)) {
+        const rate = parseFloat(data.detectionRate);
+        const tagClass = rate > 80 ? 'tag-ok' : 'tag-warn';
+
+        resultsList.innerHTML += `
+            <div class="result-item">
+                <div>
+                    <strong>${key}</strong>
+                    <span style="color:#888; font-size:12px; margin-left:8px">
+                        ${data.totalFrames}fr, ${data.duration.toFixed(1)}s
+                    </span>
+                </div>
+                <div>
+                    <span class="tag ${tagClass}">${data.detectedFrames}/${data.totalFrames} (${data.detectionRate}%)</span>
+                </div>
+            </div>
+        `;
+    }
+}
+
+function downloadAll() {
+    const output = {
+        extractionInfo: {
+            tool: 'GT Landmark Extractor v1.0',
+            extractedAt: new Date().toISOString(),
+            totalVideos: Object.keys(allGTData).length,
+        },
+        videos: allGTData
+    };
+
+    const blob = new Blob([JSON.stringify(output, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `gt_landmarks_${Date.now()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    log('GT 데이터 다운로드 완료!', 'ok');
+}
+</script>
+</body>
+</html>
