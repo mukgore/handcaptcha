@@ -430,6 +430,20 @@
             display: flex; justify-content: center; margin-top: 20px; gap: 10px;
         }
 
+        /* Camera flip button */
+        .btn-cam-flip {
+            background: #f1f5f9;
+            border: 1.5px solid var(--border);
+            border-radius: 8px;
+            padding: 4px 10px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.15s;
+            line-height: 1;
+        }
+        .btn-cam-flip:hover { background: #e2e8f0; }
+        .btn-cam-flip:disabled { opacity: 0.4; cursor: not-allowed; }
+
         /* Next trial overlay */
         .next-overlay {
             position: absolute; inset: 0;
@@ -540,6 +554,7 @@
         <div class="trial-panel">
             <div class="panel-header">
                 <span class="panel-title">📷 카메라</span>
+                <button class="btn-cam-flip" id="btnCamFlip" onclick="flipCamera()" title="카메라 전환">🔄</button>
                 <span class="panel-badge" id="frameCounter">0 프레임</span>
             </div>
             <div class="camera-area" id="cameraArea">
@@ -554,6 +569,9 @@
                 영상을 보고 준비되면 '따라하기' 버튼을 누르세요
             </div>
             <div class="panel-controls">
+                <button class="btn btn-outline" id="btnCamToggle" onclick="toggleCamera()">
+                    🔄 카메라 전환
+                </button>
                 <button class="btn btn-primary" id="btnRecord" onclick="startRecording()">
                     ▶ 따라하기
                 </button>
@@ -626,6 +644,7 @@ let hands = null;
 let cameraStream = null;
 let animFrameId = null;
 let lastLandmarks = null;
+let currentFacingMode = 'user'; // 'user' = 전면, 'environment' = 후면
 
 // DOM elements
 const refVideo = document.getElementById('refVideo');
@@ -666,7 +685,35 @@ function closeInstructions() {
     document.getElementById('instructionsModal').classList.add('hidden');
 }
 
-// ===== SCREEN NAVIGATION =====
+let currentFacingMode = 'user';
+
+async function flipCamera() {
+    currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
+    const btn = document.getElementById('btnCamFlip');
+    btn.disabled = true;
+
+    // Stop existing stream
+    if (cameraStream) cameraStream.getTracks().forEach(t => t.stop());
+    if (animFrameId) cancelAnimationFrame(animFrameId);
+
+    try {
+        cameraStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: currentFacingMode, width: { ideal: 640 }, height: { ideal: 480 } }
+        });
+        cameraVideo.srcObject = cameraStream;
+        await cameraVideo.play();
+        cameraCanvas.width = cameraVideo.videoWidth || 640;
+        cameraCanvas.height = cameraVideo.videoHeight || 480;
+        startCameraLoop();
+    } catch (e) {
+        console.error('Camera flip error:', e);
+        // Revert
+        currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
+    }
+    btn.disabled = false;
+}
+
+
 function showScreen(id) {
     document.querySelectorAll('.screen, .trial-container').forEach(s => s.classList.remove('active'));
     document.getElementById(id).classList.add('active');
@@ -703,7 +750,7 @@ async function initMediaPipe() {
 async function initCamera() {
     try {
         cameraStream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }
+            video: { facingMode: currentFacingMode, width: { ideal: 640 }, height: { ideal: 480 } }
         });
         cameraVideo.srcObject = cameraStream;
         await cameraVideo.play();
@@ -718,6 +765,23 @@ async function initCamera() {
         cameraPlaceholder.textContent = '카메라 접근이 거부되었습니다. 권한을 허용해 주세요.';
         console.error('Camera error:', e);
     }
+}
+
+async function toggleCamera() {
+    const btn = document.getElementById('btnCamToggle');
+    btn.disabled = true;
+    btn.textContent = '전환 중...';
+
+    // Stop current stream
+    if (animFrameId) cancelAnimationFrame(animFrameId);
+    if (cameraStream) cameraStream.getTracks().forEach(t => t.stop());
+
+    currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
+
+    await initCamera();
+
+    btn.disabled = false;
+    btn.innerHTML = currentFacingMode === 'user' ? '🔄 카메라 전환' : '🔄 카메라 전환';
 }
 
 function startCameraLoop() {
@@ -735,21 +799,26 @@ function onMediaPipeResults(results) {
     canvasCtx.save();
     canvasCtx.clearRect(0, 0, cameraCanvas.width, cameraCanvas.height);
 
-    // Mirror the camera
-    canvasCtx.translate(cameraCanvas.width, 0);
-    canvasCtx.scale(-1, 1);
+    if (currentFacingMode === 'user') {
+        // Mirror for front camera
+        canvasCtx.translate(cameraCanvas.width, 0);
+        canvasCtx.scale(-1, 1);
+    }
     canvasCtx.drawImage(results.image, 0, 0, cameraCanvas.width, cameraCanvas.height);
     canvasCtx.restore();
 
     const hasHand = results.multiHandLandmarks && results.multiHandLandmarks.length > 0;
 
     if (hasHand) {
-        // Draw landmarks (mirrored)
         const landmarks = results.multiHandLandmarks[0];
-        const mirroredLandmarks = landmarks.map(l => ({ x: 1 - l.x, y: l.y, z: l.z }));
 
-        drawConnectors(canvasCtx, mirroredLandmarks, HAND_CONNECTIONS, { color: '#00FF88', lineWidth: 2 });
-        drawLandmarks(canvasCtx, mirroredLandmarks, { color: '#FF4444', lineWidth: 1, radius: 3 });
+        // Mirror landmarks only for front camera
+        const displayLandmarks = currentFacingMode === 'user'
+            ? landmarks.map(l => ({ x: 1 - l.x, y: l.y, z: l.z }))
+            : landmarks;
+
+        drawConnectors(canvasCtx, displayLandmarks, HAND_CONNECTIONS, { color: '#00FF88', lineWidth: 2 });
+        drawLandmarks(canvasCtx, displayLandmarks, { color: '#FF4444', lineWidth: 1, radius: 3 });
 
         lastLandmarks = landmarks; // Store original (not mirrored)
 
