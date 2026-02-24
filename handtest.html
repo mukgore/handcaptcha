@@ -222,25 +222,46 @@
         .video-progress-bar {
             position: absolute;
             bottom: 0; left: 0; right: 0;
-            height: 4px;
-            background: rgba(255,255,255,0.2);
+            height: 8px;
+            background: rgba(255,255,255,0.25);
         }
         .video-progress-fill {
             height: 100%;
-            background: var(--primary);
+            background: #60a5fa;
             width: 0%;
             transition: width 0.1s linear;
+            box-shadow: 0 0 6px rgba(96,165,250,0.7);
         }
         .video-time {
             position: absolute;
-            bottom: 10px; right: 10px;
-            font-size: 12px;
-            color: rgba(255,255,255,0.8);
-            background: rgba(0,0,0,0.5);
-            padding: 2px 8px;
-            border-radius: 4px;
+            bottom: 16px; right: 12px;
+            font-size: 13px;
+            color: #ffffff;
+            background: rgba(0,0,0,0.65);
+            padding: 3px 10px;
+            border-radius: 6px;
             font-family: monospace;
+            font-weight: 600;
+            letter-spacing: 0.5px;
         }
+
+        /* Video end overlay */
+        .video-end-overlay {
+            position: absolute; inset: 0;
+            background: #0f172a;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            color: white; gap: 10px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+        }
+        .video-end-overlay.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .video-end-overlay .end-icon { font-size: 36px; }
+        .video-end-overlay p { font-size: 14px; opacity: 0.75; }
 
         .camera-area {
             flex: 1;
@@ -284,6 +305,7 @@
         .status-bar.waiting { background: #fef3c7; color: #92400e; }
         .status-bar.detecting { background: #dbeafe; color: #1e40af; }
         .status-bar.recording { background: #dcfce7; color: #166534; }
+        .status-bar.complete { background: #dcfce7; color: #166534; font-weight: 700; }
         .status-bar.recording .rec-dot {
             display: inline-block; width: 8px; height: 8px;
             background: #dc2626; border-radius: 50%;
@@ -443,9 +465,9 @@
         <h1>👋 손 동작 인식 실험</h1>
         <p class="subtitle">인간과 AI의 가려진 손 추정 능력 비교 연구</p>
         <p>본 실험에 참여해 주셔서 감사합니다.<br>
-        시작 버튼을 누르면 실험 안내가 팝업으로 표시됩니다.</p>
+        시작 버튼을 눌러 따라하기에 사용할 손을 선택해 주세요.</p>
         <br>
-        <button class="btn btn-primary btn-lg" onclick="openInstructionsFromStart()">시작하기</button>
+        <button class="btn btn-primary btn-lg" onclick="showScreen('screenHandSelect')">시작하기</button>
     </div>
 </div>
 
@@ -459,14 +481,14 @@
             <li>영상에 제시된 <strong>일부가 가려진 손 동작을</strong> 따라할 준비가 되었다면 <strong>'따라하기'</strong> 버튼을 클릭합니다.</li>
             <li>카메라에 손이 인식되면 <strong>자동으로 기록이 시작</strong>됩니다.</li>
             <li>제시된 영상의 손 동작을 <strong>최대한 비슷하게</strong> 따라하세요.</li>
-            <li>동작을 끝낸 후 <strong>'따라하기 종료'</strong> 버튼을 눌러주세요.</li>
+            <li>영상이 끝나면 <strong>자동으로 기록이 종료</strong>되고 다음 영상으로 넘어갑니다.</li>
             <li>총 <strong>9개</strong>의 영상에 대해 반복합니다.</li>
         </ol>
         <div class="info-box">
             ℹ️ 카메라 접근 권한이 필요합니다. 권한 요청 시 '허용'을 선택해 주세요.
         </div>
         <div class="modal-close-row">
-            <button class="btn btn-primary" id="modalConfirmBtn" onclick="closeInstructions()">확인</button>
+            <button class="btn btn-primary" id="modalConfirmBtn" onclick="closeInstructions()">실험 시작하기</button>
         </div>
     </div>
 </div>
@@ -504,6 +526,10 @@
             </div>
             <div class="video-area">
                 <video id="refVideo" loop muted playsinline></video>
+                <div class="video-end-overlay" id="videoEndOverlay">
+                    <div class="end-icon">✅</div>
+                    <p>동작 인식 완료 중...</p>
+                </div>
                 <div class="video-loading" id="videoLoading" style="position:absolute;color:#94a3b8;font-size:14px;">영상 로딩 중...</div>
                 <div class="video-progress-bar"><div class="video-progress-fill" id="videoProgressFill"></div></div>
                 <div class="video-time" id="videoTime">0:00 / 0:00</div>
@@ -632,26 +658,12 @@ refVideo.addEventListener('timeupdate', () => {
 });
 
 // ===== INSTRUCTIONS MODAL =====
-let instructionsFromStart = false;
-
-function openInstructionsFromStart() {
-    instructionsFromStart = true;
-    document.getElementById('modalConfirmBtn').textContent = '다음 →';
-    document.getElementById('instructionsModal').classList.remove('hidden');
-}
-
 function openInstructions() {
-    instructionsFromStart = false;
-    document.getElementById('modalConfirmBtn').textContent = '확인';
     document.getElementById('instructionsModal').classList.remove('hidden');
 }
 
 function closeInstructions() {
     document.getElementById('instructionsModal').classList.add('hidden');
-    if (instructionsFromStart) {
-        instructionsFromStart = false;
-        showScreen('screenHandSelect');
-    }
 }
 
 // ===== SCREEN NAVIGATION =====
@@ -748,7 +760,6 @@ function onMediaPipeResults(results) {
             recordingStartTime = performance.now();
             currentTrialFrames = [];
             setStatus('recording', '<span class="rec-dot"></span>기록 중... 동작을 따라해 주세요');
-            btnStop.disabled = false;
         }
 
         // Record frame
@@ -837,6 +848,9 @@ async function startTrials() {
 
     await initCamera();
     loadTrial(0);
+
+    // Show instructions modal over the trial screen
+    openInstructions();
 }
 
 function loadTrial(index) {
@@ -855,6 +869,10 @@ function loadTrial(index) {
         if (i === index) dot.classList.add('current');
     });
 
+    // Reset video end overlay
+    document.getElementById('videoEndOverlay').classList.remove('visible');
+    refVideo.style.opacity = '1';
+
     // Load video
     const videoLoading = document.getElementById('videoLoading');
     videoLoading.style.display = 'block';
@@ -862,6 +880,7 @@ function loadTrial(index) {
     videoTime.textContent = '0:00 / 0:00';
     const videoUrl = VIDEO_BASE + trial.id + '.mp4';
     console.log('Loading video:', videoUrl);
+    refVideo.loop = true;
     refVideo.src = videoUrl;
     refVideo.load();
     refVideo.oncanplay = () => {
@@ -885,26 +904,43 @@ function loadTrial(index) {
 function startRecording() {
     isWaitingForHand = true;
     btnRecord.disabled = true;
+    btnStop.style.display = 'none'; // 수동 종료 버튼 숨김
     setStatus('detecting', '손을 카메라에 보여주세요... 인식 대기 중');
 
-    // Restart video from the beginning
+    // Restart video from the beginning (remove loop so ended fires)
+    refVideo.loop = false;
     refVideo.currentTime = 0;
     refVideo.play().catch(e => console.warn('Video play failed:', e));
 
-    // If hand is already detected, it will start immediately in onMediaPipeResults
+    // Auto-stop when video ends
+    refVideo.addEventListener('ended', onVideoEnded, { once: true });
+
+    // If hand is already detected, start immediately
     if (lastLandmarks) {
         isWaitingForHand = false;
         isRecording = true;
         recordingStartTime = performance.now();
         currentTrialFrames = [];
         setStatus('recording', '<span class="rec-dot"></span>기록 중... 동작을 따라해 주세요');
-        btnStop.disabled = false;
     }
 }
 
+function onVideoEnded() {
+    // Immediately hide video
+    document.getElementById('videoEndOverlay').classList.add('visible');
+    setStatus('complete', '✅ 인식 완료! 잠시 후 다음 영상으로 넘어갑니다...');
+
+    // 1 second grace period then stop
+    setTimeout(() => {
+        stopRecording();
+    }, 1000);
+}
+
 function stopRecording() {
+    if (!isRecording && !isWaitingForHand) return; // 중복 호출 방지
     isRecording = false;
     isWaitingForHand = false;
+    btnStop.style.display = '';
     btnStop.disabled = true;
 
     const trial = trialVideos[currentTrialIndex];
