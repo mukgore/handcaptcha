@@ -685,8 +685,6 @@ function closeInstructions() {
     document.getElementById('instructionsModal').classList.add('hidden');
 }
 
-let currentFacingMode = 'user';
-
 async function flipCamera() {
     currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
     const btn = document.getElementById('btnCamFlip');
