@@ -428,31 +428,38 @@ function onRes(r){
 
         // ==================== 수정된 매칭 로직 ====================
         if(phase === 'matching' && kfIdx < keyframes.length && targetLm){
-            const target = keyframes[kfIdx].baseLm;
-            const uPP = ppSingle(userLm);
-            const tPP = ppSingle(target);
-            const err = angleErr(uPP, tPP);
+    const target = keyframes[kfIdx].baseLm;
+    const uPP = ppSingle(userLm);
+    const tPP = ppSingle(target);
+    const err = angleErr(uPP, tPP);
 
-            if(err < MATCH_ANGLE_THRESH){
-                if(matchStart === 0) matchStart = performance.now();
-                const held = performance.now() - matchStart;
-                updateMatchIndicator('matched', `맞춤 중... ${Math.min(100, Math.round(held / MATCH_HOLD_MS * 100))}%`);
+    if(err < MATCH_ANGLE_THRESH){
+        if(matchStart === 0) matchStart = performance.now();
+        
+        const held = performance.now() - matchStart;
+        const progress = Math.min(100, Math.round(held / MATCH_HOLD_MS * 100));
+        
+        updateMatchIndicator('matched', `맞춤 중... ${progress}%`);
 
-                if(held >= MATCH_HOLD_MS){
-                    matchStart = 0;
-                    if(kfIdx === 0){
-                        document.getElementById('kfd0').className = 'kf-dot done';
-                        startTransitionRecording();
-                    } else {
-                        onTransitionMatched();
-                    }
-                }
+        if(held >= MATCH_HOLD_MS){
+            matchStart = 0;
+            if(kfIdx === 0){
+                document.getElementById('kfd0').className = 'kf-dot done';
+                startTransitionRecording();
             } else {
-                matchStart = 0;
-                updateMatchIndicator('waiting', `자세를 맞춰주세요 (오차: ${err.toFixed(0)}°)`);
+                onTransitionMatched();
             }
         }
-
+    } else {
+        // 인식 끊김이 잦을 때 너무 빨리 리셋되지 않도록 grace period 추가
+        if(matchStart > 0 && (performance.now() - matchStart) < 150){ 
+            // 150ms 이내의 작은 끊김은 관대하게 유지
+        } else {
+            matchStart = 0;
+            updateMatchIndicator('waiting', `자세를 맞춰주세요 (오차: ${err.toFixed(0)}°)`);
+        }
+    }
+}
         if(phase === 'recording'){
             curSegFrames.push({t: performance.now() - recStart, lm: userLm});
             document.getElementById('frameCounter').textContent = curSegFrames.length + ' 프레임';
