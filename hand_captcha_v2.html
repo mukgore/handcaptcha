@@ -352,22 +352,6 @@ function onTransitionMatched(){
     }
 }
 
-    document.getElementById('kfd'+(kfIdx-1)).className = 'kf-dot done';
-
-    if(kfIdx >= keyframes.length-1){
-        document.getElementById('kfd'+kfIdx).className = 'kf-dot done';
-        phase = 'done';
-        updateMatchIndicator('matched', '✅ 완료!');
-        setS('complete', '✅ 모든 동작이 완료되었습니다!');
-        setTimeout(compute, 300);
-    } else {
-        phase = 'matching';
-        matchStart = 0;
-        updateMatchIndicator('waiting', '자세를 맞춰주세요');
-        setS('waiting', '현재 자세를 유지한 후, 다음 목표로 전환하세요');
-    }
-}
-
 // ===== MEDIAPIPE - 개선된 매칭 로직 =====
 async function initMP(){
     hands = new Hands({locateFile: f => `https://unpkg.com/@mediapipe/hands@0.4.1675469240/${f}`});
