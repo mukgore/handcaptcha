@@ -347,6 +347,20 @@ function onTransitionMatched(){
         setS('complete', '✅ 모든 동작이 완료되었습니다!');
         setTimeout(compute, 300);
     } else {
+        // 다음 전환 기록 시작 (kfIdx 증가 + 다음 목표 표시)
+        startTransitionRecording();
+    }
+}
+
+    document.getElementById('kfd'+(kfIdx-1)).className = 'kf-dot done';
+
+    if(kfIdx >= keyframes.length-1){
+        document.getElementById('kfd'+kfIdx).className = 'kf-dot done';
+        phase = 'done';
+        updateMatchIndicator('matched', '✅ 완료!');
+        setS('complete', '✅ 모든 동작이 완료되었습니다!');
+        setTimeout(compute, 300);
+    } else {
         phase = 'matching';
         matchStart = 0;
         updateMatchIndicator('waiting', '자세를 맞춰주세요');
