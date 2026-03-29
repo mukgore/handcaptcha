@@ -31,11 +31,11 @@ video,canvas{position:absolute;width:100%;height:100%;object-fit:cover}
 </div>
 
 <script>
-// ===== 설정 =====
-const VIDEO_BASE = './';
-const ACTIONS = ['l1','l2','l3','r1','r2','r3'];
+// ===== 실험 순서 =====
+let order = Math.random() < 0.5 ? ['A','B'] : ['B','A'];
+let trialIndex = 0;
 
-let mode = Math.random() < 0.5 ? 'A' : 'B';
+// ===== 상태 =====
 let keyframes = [];
 let kfIdx = 0;
 let phase = 'matching';
@@ -43,11 +43,16 @@ let matchStart = 0;
 
 // ===== 로그 =====
 let log = {
-    mode,
-    matches: [],
-    timestamps: [],
-    frames: []
+    order,
+    trials: [
+        { mode: order[0], matches: [], timestamps: [], frames: [] },
+        { mode: order[1], matches: [], timestamps: [], frames: [] }
+    ]
 };
+
+// ===== 설정 =====
+const VIDEO_BASE = './';
+const ACTIONS = ['l1','l2','l3','r1','r2','r3'];
 
 // ===== DOM =====
 const rv = document.getElementById('refVideo');
@@ -58,10 +63,14 @@ const cam = document.getElementById('cam');
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 
-// ===== 시퀀스 생성 =====
+// ===== 현재 모드 =====
+function currentMode(){
+    return order[trialIndex];
+}
+
+// ===== 시퀀스 =====
 function genSequence(){
     const sel = ACTIONS.sort(()=>Math.random()-0.5).slice(0,2);
-
     keyframes = [];
     sel.forEach(a=>{
         keyframes.push({action:a, time:0});
@@ -70,7 +79,7 @@ function genSequence(){
     });
 }
 
-// ===== 키프레임 표시 =====
+// ===== 키프레임 =====
 function showKeyframe(){
     if(kfIdx >= keyframes.length){
         finish();
@@ -80,23 +89,23 @@ function showKeyframe(){
     const kf = keyframes[kfIdx];
 
     document.getElementById('infoText').innerText =
-        `Mode:${mode} | ${kfIdx+1}/${keyframes.length}`;
+        `Mode:${currentMode()} | ${kfIdx+1}/${keyframes.length}`;
 
     rv.src = VIDEO_BASE + kf.action + '_level3_DIP.mp4';
 
     rv.onloadedmetadata = ()=>{
         rv.currentTime = kf.time;
 
-        if(mode === 'A'){
+        if(currentMode()==='A'){
             rv.pause();
-        } else {
+        }else{
             rv.pause();
             drawFrame();
         }
     };
 }
 
-// ===== 프레임 그리기 =====
+// ===== 프레임 =====
 function drawFrame(){
     rc.width = rv.videoWidth;
     rc.height = rv.videoHeight;
@@ -105,12 +114,12 @@ function drawFrame(){
 
 // ===== 다음 =====
 function next(){
-    log.matches.push(kfIdx);
-    log.timestamps.push(performance.now());
+    log.trials[trialIndex].matches.push(kfIdx);
+    log.trials[trialIndex].timestamps.push(performance.now());
 
-    if(mode === 'A'){
+    if(currentMode()==='A'){
         playSegment();
-    } else {
+    }else{
         kfIdx++;
         showKeyframe();
     }
@@ -118,7 +127,7 @@ function next(){
 
 // ===== 방안 A =====
 function playSegment(){
-    phase = 'playing';
+    phase='playing';
 
     const nextKF = keyframes[kfIdx+1];
     if(!nextKF){
@@ -131,22 +140,40 @@ function playSegment(){
 
     const stopTime = nextKF.time;
 
-    const loop = ()=>{
-        if(rv.currentTime >= stopTime){
+    const loop=()=>{
+        if(rv.currentTime>=stopTime){
             rv.pause();
             kfIdx++;
-            phase = 'matching';
+            phase='matching';
             showKeyframe();
-        } else requestAnimationFrame(loop);
+        }else requestAnimationFrame(loop);
     };
     loop();
 }
 
 // ===== 종료 =====
 function finish(){
+    if(trialIndex === 0){
+        trialIndex++;
+
+        alert(`다음 실험 시작 (${currentMode()})`);
+
+        kfIdx=0;
+        phase='matching';
+        matchStart=0;
+
+        genSequence();
+        showKeyframe();
+        return;
+    }
+
+    finalFinish();
+}
+
+// ===== 최종 종료 =====
+function finalFinish(){
     phase='done';
 
-    // 1. JSON 저장
     const dataStr = JSON.stringify(log, null, 2);
     const blob = new Blob([dataStr], {type: "application/json"});
     const url = URL.createObjectURL(blob);
@@ -156,40 +183,15 @@ function finish(){
     a.download = `result_${Date.now()}.json`;
     a.click();
 
-    console.log(log);
-
-    // 2. 화면 교체 + 설문 버튼 제공
     document.body.innerHTML = `
-        <div style="
-            display:flex;
-            flex-direction:column;
-            align-items:center;
-            justify-content:center;
-            height:100vh;
-            background:#111;
-            color:#fff;
-            font-family:sans-serif;
-            text-align:center;
-        ">
-            <h2>실험 완료</h2>
-            <p style="margin-top:10px;">
-                데이터가 저장되었습니다.<br>
-                아래 버튼을 눌러 설문에 응답해주세요.
-            </p>
-
-            <a href="https://forms.gle/ji8KMSwBzbxXzTUv6" target="_blank"
-               style="
-                   margin-top:20px;
-                   padding:14px 28px;
-                   background:#2563eb;
-                   color:#fff;
-                   border-radius:10px;
-                   text-decoration:none;
-                   font-weight:600;
-               ">
-               SUS 설문 참여
-            </a>
-        </div>
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background:#111;color:#fff;text-align:center;">
+        <h2>실험 완료</h2>
+        <p>설문에 응답해주세요</p>
+        <a href="https://forms.gle/ji8KMSwBzbxXzTUv6" target="_blank"
+        style="margin-top:20px;padding:14px 28px;background:#2563eb;color:#fff;border-radius:10px;text-decoration:none;">
+        SUS 설문 참여
+        </a>
+    </div>
     `;
 }
 
@@ -213,21 +215,21 @@ hands.onResults(res=>{
         drawConnectors(ctx, lm, HAND_CONNECTIONS);
         drawLandmarks(ctx, lm);
 
-        // 🔴 랜드마크 저장
-        log.frames.push({
+        // 저장
+        log.trials[trialIndex].frames.push({
             t: performance.now(),
             kfIndex: kfIdx,
             phase: phase,
-            landmarks: lm.map(p => [p.x, p.y, p.z])
+            landmarks: lm.map(p => [p.x,p.y,p.z])
         });
 
-        if(phase === 'matching'){
-            if(matchStart === 0) matchStart = performance.now();
+        if(phase==='matching'){
+            if(matchStart===0) matchStart=performance.now();
 
-            const held = performance.now() - matchStart;
+            const held = performance.now()-matchStart;
 
-            if(held > 500){
-                matchStart = 0;
+            if(held>500){
+                matchStart=0;
                 next();
             }
         }
@@ -239,8 +241,8 @@ async function initCam(){
     const stream = await navigator.mediaDevices.getUserMedia({video:true});
     cam.srcObject = stream;
 
-    canvas.width = 640;
-    canvas.height = 480;
+    canvas.width=640;
+    canvas.height=480;
 
     async function loop(){
         await hands.send({image:cam});
