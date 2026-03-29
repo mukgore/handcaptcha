@@ -30,8 +30,8 @@
         .hand-btn .hand-emoji{font-size:40px;margin-bottom:8px}.hand-btn .hand-label{font-weight:600;font-size:15px}
         .input-group{margin:16px auto;max-width:300px;text-align:left}
         .input-group label{font-size:13px;color:var(--text-secondary);display:block;margin-bottom:4px;font-weight:500}
-        .input-group input{width:100%;padding:10px 14px;border:2px solid var(--border);border-radius:8px;font-size:15px;font-family:inherit;transition:border .15s}
-        .input-group input:focus{outline:none;border-color:var(--primary)}
+        .input-group select{width:100%;padding:10px 14px;border:2px solid var(--border);border-radius:8px;font-size:15px;font-family:inherit;transition:border .15s;background-color:var(--surface);cursor:pointer}
+        .input-group select:focus{outline:none;border-color:var(--primary)}
         .trial-container{display:none;flex:1;flex-direction:column;width:100%;min-height:0;overflow:hidden}
         .trial-container.active{display:flex}
         .trial-content{display:flex;flex:1;gap:16px;padding:16px;overflow:hidden}
@@ -101,10 +101,14 @@
         <b>방안 B</b>: 대표 프레임만 표시 (영상 없음)<br>
         순서는 무작위로 결정됩니다.<br>
         선택한 손의 <b>3개 동작 전부</b>를 수행합니다.</p>
+
         <div class="input-group">
-            <label>참가자 ID (이니셜 등)</label>
-            <input type="text" id="inputPid" placeholder="예: KYJ" maxlength="20">
+            <label>카메라 선택</label>
+            <select id="cameraSelect">
+                <option value="">카메라 확인 중...</option>
+            </select>
         </div>
+
         <div class="hand-select-group">
             <div class="hand-btn" onclick="selectHand('left',this)"><div class="hand-emoji">🤚</div><div class="hand-label">왼손</div></div>
             <div class="hand-btn" onclick="selectHand('right',this)"><div class="hand-emoji">✋</div><div class="hand-label">오른손</div></div>
@@ -161,7 +165,7 @@
 <script>
 const VIDEO_BASE = 'https://mukgore.github.io/handcaptcha/';
 const ACTIONS_L = ['l1','l2','l3'], ACTIONS_R = ['r1','r2','r3'];
-const MATCH_ANGLE_THRESH = 25;
+const MATCH_ANGLE_THRESH = 38;
 const THRESHOLD = 0.25;
 const W2 = {da:0.38, ac:0.37, a:0.25};
 const MX = {angle:46.9413, dtw_angle:44.0014, accel:0.1926};
@@ -174,17 +178,17 @@ let trialIdx = 0;
 let trialResults = {};
 let savedKeyframeSpec = null;
 
-let selectedHand = null, pid = '';
+let selectedHand = null;
+let pid = 'user_' + Date.now().toString().slice(-4); // JSON 결과용 익명 ID
 let targetLm = null;
 let hands = null, camStream = null, animId = null, lastLm = null, baseData = null;
 let keyframes = [], kfIdx = 0;
 // phase: 'idle' | 'matching' | 'recording' | 'playing' | 'done'
-// 핵심 변경: 'recording'은 프레임 기록 + 매칭 체크를 동시에 수행
 let phase = 'idle';
 let matchStart = 0, recStart = 0, segments = [], curSegFrames = [];
 let trialStartTime = 0;
 let videoPlaying = false;
-let fading = false; // 페이드 전환 중
+let fading = false;
 
 const rv = document.getElementById('refVideo');
 const rc = document.getElementById('refCanvas');
@@ -194,6 +198,34 @@ const cc = document.getElementById('cameraCanvas');
 const ctx = cc.getContext('2d');
 
 function currentMode(){ return abOrder[trialIdx]; }
+
+// ===== CAMERA LOADING =====
+async function loadCameras() {
+    try {
+        // 권한 요청을 통해 카메라 목록의 레이블(이름)을 가져오기 위함
+        const initialStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        initialStream.getTracks().forEach(t => t.stop());
+
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter(d => d.kind === 'videoinput');
+        const select = document.getElementById('cameraSelect');
+        select.innerHTML = '';
+
+        if (videoDevices.length === 0) {
+            select.innerHTML = '<option value="">사용 가능한 카메라가 없습니다</option>';
+        } else {
+            videoDevices.forEach((device, idx) => {
+                const opt = document.createElement('option');
+                opt.value = device.deviceId;
+                opt.text = device.label || `카메라 ${idx + 1}`;
+                select.appendChild(opt);
+            });
+        }
+    } catch (e) {
+        console.error(e);
+        document.getElementById('cameraSelect').innerHTML = '<option value="">카메라 권한이 필요합니다</option>';
+    }
+}
 
 // ===== DATA LOADING =====
 async function loadBase(){
@@ -245,7 +277,7 @@ function angleErr(uLm, tLm){
     return tot/c;
 }
 
-// ===== SEQUENCE (3개 동작 전부) =====
+// ===== SEQUENCE =====
 function genSequence(){
     if(savedKeyframeSpec){
         keyframes = savedKeyframeSpec.map(spec => {
@@ -253,7 +285,6 @@ function genSequence(){
             return { action:spec.action, frameIdx:spec.frameIdx, time:spec.frameIdx/24, baseLm:baseLm[spec.frameIdx], allBaseLm:baseLm };
         });
     } else {
-        // 3개 동작 전부 사용
         const acts = selectedHand==='left' ? ACTIONS_L : ACTIONS_R;
         keyframes = [];
         for(const action of acts){
@@ -271,7 +302,7 @@ function genSequence(){
     }).join('');
 }
 
-// ===== SHOW KEYFRAME (정지 이미지) =====
+// ===== SHOW KEYFRAME =====
 function showKeyframeImage(idx){
     const kf = keyframes[idx];
     targetLm = kf.baseLm;
@@ -297,22 +328,19 @@ function updateMatchIndicator(cls, text){
 }
 function setS(t,h){ const s=document.getElementById('statusBar'); s.className='status-bar '+t; s.innerHTML=h; }
 
-// ===== 첫 키프레임 매칭 완료 → 전환 기록 시작 =====
+// ===== TRANSITION =====
 function onFirstKeyframeMatched(){
     document.getElementById('kfd0').className = 'kf-dot done';
     beginNextTransition();
 }
 
-// ===== 전환 시작 (핵심 함수) =====
 function beginNextTransition(){
-    // 기록 시작
     phase = 'recording';
     videoPlaying = false;
     recStart = performance.now();
     curSegFrames = [];
     document.getElementById('kfd'+kfIdx).className = 'kf-dot rec';
 
-    // kfIdx 증가 → 다음 목표
     kfIdx++;
     if(kfIdx >= keyframes.length){ finishTrial(); return; }
 
@@ -324,7 +352,6 @@ function beginNextTransition(){
     const mode = currentMode();
 
     if(mode === 'A'){
-        // Mode A: 영상 재생하면서 기록
         updateMatchIndicator('playing','▶ 영상 재생 중...');
         setS('playing','영상을 보면서 다음 자세를 준비하세요');
 
@@ -332,7 +359,6 @@ function beginNextTransition(){
         const toKf = keyframes[kfIdx];
 
         if(fromKf.action === toKf.action){
-            // 같은 동작: 영상 재생
             rv.style.display = 'block'; rc.style.display = 'none';
             videoPlaying = true;
             rv.currentTime = fromKf.time;
@@ -344,40 +370,35 @@ function beginNextTransition(){
                     rv.style.display = 'none'; rc.style.display = 'block';
                     extractVideoFrame(rv,rc,rctx);
                     videoPlaying = false;
-                    // 영상 끝 → 이제 매칭 대기 (phase는 recording 유지!)
                     updateMatchIndicator('recording','자세를 맞춰주세요');
                     setS('recording','영상이 멈췄습니다. 자세를 따라하세요');
                 } else requestAnimationFrame(checkLoop);
             };
             checkLoop();
         } else {
-            // 다른 동작: 다음 키프레임 이미지 바로 표시
             showKeyframeImage(kfIdx);
             updateMatchIndicator('recording','자세를 맞춰주세요');
             setS('recording','다음 자세로 전환해 주세요');
         }
     } else {
-        // Mode B: 페이드 효과로 다음 키프레임 전환
         fading = true;
-        rc.classList.add('fading'); // 페이드 아웃
+        rc.classList.add('fading'); 
         updateMatchIndicator('recording','다음 자세 준비 중...');
         setS('recording','다음 자세로 전환됩니다...');
         setTimeout(() => {
-            // 페이드 아웃 완료 → 이미지 교체
             showKeyframeImage(kfIdx);
             setTimeout(() => {
-                rc.classList.remove('fading'); // 페이드 인
+                rc.classList.remove('fading'); 
                 setTimeout(() => {
-                    fading = false; // 페이드 인 완료 → 매칭 시작
+                    fading = false; 
                     updateMatchIndicator('recording','자세를 맞춰주세요');
                     setS('recording','다음 자세로 전환해 주세요');
-                }, 500); // 페이드 인 시간
-            }, 100); // 이미지 로딩 여유
-        }, 500); // 페이드 아웃 시간
+                }, 500); 
+            }, 100); 
+        }, 500); 
     }
 }
 
-// ===== 전환 매칭 완료 =====
 function onTransitionMatched(){
     segments.push({
         fromKf: kfIdx-1, toKf: kfIdx,
@@ -394,7 +415,6 @@ function onTransitionMatched(){
         setS('complete','✅ 모든 동작이 완료되었습니다!');
         setTimeout(finishTrial, 500);
     } else {
-        // 다음 전환
         beginNextTransition();
     }
 }
@@ -407,9 +427,19 @@ async function initMP(){
     await hands.initialize();
     document.getElementById('loadingOverlay').classList.add('hidden');
 }
+
 async function initCam(){
     try{
-        camStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:640},height:{ideal:480}}});
+        const deviceId = document.getElementById('cameraSelect').value;
+        const constraints = {
+            video: {
+                ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode: 'user' }),
+                width: { ideal: 640 },
+                height: { ideal: 480 }
+            }
+        };
+
+        camStream = await navigator.mediaDevices.getUserMedia(constraints);
         cv.srcObject=camStream; await cv.play();
         cc.width=cv.videoWidth||640; cc.height=cv.videoHeight||480;
         document.getElementById('cameraPlaceholder').style.display='none'; cc.style.display='block';
@@ -435,7 +465,6 @@ function onRes(r){
 
     const userLm = lm.map(l=>[l.x, l.y]);
 
-    // ===== 1) 첫 키프레임 매칭 (phase === 'matching') =====
     if(phase==='matching' && kfIdx<keyframes.length && targetLm){
         const uPP=ppSingle(userLm), tPP=ppSingle(targetLm);
         const err=angleErr(uPP, tPP);
@@ -447,16 +476,12 @@ function onRes(r){
         }
     }
 
-    // ===== 2) 전환 기록 중 (phase === 'recording') =====
-    // 프레임 기록 + 매칭 체크를 동시에 수행
     if(phase==='recording'){
         curSegFrames.push({t:performance.now()-recStart, lm:userLm});
         document.getElementById('frameCounter').textContent = curSegFrames.length+' 프레임';
 
-        // Mode A 영상 재생 중 또는 페이드 전환 중에는 매칭 체크 안 함
         if(videoPlaying || fading) return;
 
-        // 다음 키프레임과 매칭 체크
         if(kfIdx < keyframes.length && targetLm){
             const uPP=ppSingle(userLm), tPP=ppSingle(targetLm);
             const err=angleErr(uPP, tPP);
@@ -464,15 +489,14 @@ function onRes(r){
                 updateMatchIndicator('matched','✅ 자세가 맞습니다!');
                 onTransitionMatched();
             }
-            // recording 중에는 오차 표시 안 함 (이미 recording indicator 표시 중)
         }
     }
 }
 
 // ===== UI =====
 function selectHand(h,b){ selectedHand=h; document.querySelectorAll('.hand-btn').forEach(x=>x.classList.remove('selected')); b.classList.add('selected'); checkReady(); }
-function checkReady(){ document.getElementById('btnStart').disabled=!(selectedHand && document.getElementById('inputPid').value.trim()); }
-document.getElementById('inputPid').addEventListener('input', checkReady);
+function checkReady(){ document.getElementById('btnStart').disabled=!(selectedHand); }
+
 function showScr(id){ document.querySelectorAll('.screen,.trial-container').forEach(s=>s.classList.remove('active')); document.getElementById(id).classList.add('active'); }
 
 function updateModeBadge(){
@@ -484,7 +508,6 @@ function updateModeBadge(){
 
 // ===== EXPERIMENT FLOW =====
 async function startExperiment(){
-    pid = document.getElementById('inputPid').value.trim();
     await loadBase();
     await initCam();
     trialIdx = 0;
@@ -500,7 +523,6 @@ function runTrial(){
     rv.style.display='none'; rc.style.display='block';
     showScr('screenTrial');
 
-    // 첫 키프레임 표시 + matching 모드
     showKeyframeImage(0);
     phase = 'matching';
     matchStart = 0;
@@ -576,7 +598,6 @@ function showFinalResult(){
     const diff = (b.captcha||0) - (a.captcha||0);
     v.textContent = `A: ${(a.captcha||0).toFixed(3)} / B: ${(b.captcha||0).toFixed(3)} (차이: ${diff>0?'+':''}${diff.toFixed(3)})`;
 
-    // Auto-download
     const result = {
         experimentInfo: { participantId:pid, selectedHand, timestamp:Date.now(), abOrder, version:'ab_v2_3actions' },
         keyframeSpec: savedKeyframeSpec,
@@ -598,6 +619,8 @@ function showFinalResult(){
     const timer=setInterval(()=>{ countdown--; if(countdown<=0){clearInterval(timer);window.location.href=FORMS_URL;} else msg.textContent=`${countdown}초 후 사용성 설문으로 이동합니다...`; },1000);
 }
 
+// 초기화: 권한 요청/목록 불러오기 먼저 수행한 후, MP 로딩
+loadCameras();
 initMP().catch(e=>{ document.getElementById('loadingOverlay').innerHTML='<p style="color:var(--danger);padding:24px;">MediaPipe 로딩 실패</p>'; });
 </script>
 </body>
