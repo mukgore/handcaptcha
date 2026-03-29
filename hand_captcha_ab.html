@@ -53,7 +53,7 @@
         .camera-area canvas{width:100%;height:100%;object-fit:contain}
         .camera-area video{display:none}
         .camera-placeholder{color:#94a3b8;text-align:center;font-size:14px;padding:24px}
-        .kf-progress{display:flex;gap:8px;justify-content:center;padding:10px;flex-shrink:0}
+        .kf-progress{display:flex;gap:8px;justify-content:center;padding:10px;flex-shrink:0;flex-wrap:wrap}
         .kf-step{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text-secondary)}
         .kf-dot{width:28px;height:28px;border-radius:50%;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;transition:all .3s}
         .kf-dot.active{border-color:var(--accent);background:#fef3c7;color:#92400e}
@@ -92,14 +92,14 @@
     <div class="mode-badge" id="modeBadge" style="display:none"></div>
 </div>
 
-<!-- 시작 화면 -->
 <div class="screen active" id="screenStart">
     <div class="card">
         <h1>🤚 CAPTCHA 비교 실험</h1>
         <p>두 가지 방식의 CAPTCHA를 순서대로 체험합니다.<br>
         <b>방안 A</b>: 영상이 재생되며 다음 자세로 안내<br>
         <b>방안 B</b>: 대표 프레임만 표시 (영상 없음)<br>
-        순서는 무작위로 결정됩니다.</p>
+        순서는 무작위로 결정됩니다.<br>
+        선택한 손의 <b>3개 동작 전부</b>를 수행합니다.</p>
         <div class="input-group">
             <label>참가자 ID (이니셜 등)</label>
             <input type="text" id="inputPid" placeholder="예: KYJ" maxlength="20">
@@ -112,7 +112,6 @@
     </div>
 </div>
 
-<!-- 중간 안내 화면 (1차 → 2차 전환) -->
 <div class="screen" id="screenInter">
     <div class="inter-card">
         <h2 id="interTitle"></h2>
@@ -121,7 +120,6 @@
     </div>
 </div>
 
-<!-- 실험 화면 -->
 <div class="trial-container" id="screenTrial">
     <div class="kf-progress" id="kfProgress"></div>
     <div class="trial-content">
@@ -142,7 +140,6 @@
     </div>
 </div>
 
-<!-- 결과 화면 -->
 <div class="screen" id="screenResult">
     <div class="result-card">
         <h2>📊 A/B 비교 결과</h2>
@@ -153,6 +150,7 @@
         <div class="compare-row"><span class="label">Accel</span><span id="rAcA">-</span><span id="rAcB">-</span></div>
         <div class="compare-row"><span class="label">관절</span><span id="rAnA">-</span><span id="rAnB">-</span></div>
         <div class="compare-row header-row"><span class="label">CAPTCHA 점수</span><span id="rFinA">-</span><span id="rFinB">-</span></div>
+        <div class="compare-row"><span class="label">소요 시간</span><span id="rTimeA">-</span><span id="rTimeB">-</span></div>
         <div class="verdict pass" id="verdict"></div>
         <div class="redirect-msg" id="redirectMsg"></div>
         <div class="btn-row"><button class="btn btn-primary" onclick="location.reload()">다시 시도</button></div>
@@ -170,18 +168,21 @@ const AT = [[0,5,6],[5,6,7],[6,7,8],[0,9,10],[9,10,11],[10,11,12],[0,13,14],[13,
 const LN = ['WRIST','THUMB_CMC','THUMB_MCP','THUMB_IP','THUMB_TIP','INDEX_MCP','INDEX_PIP','INDEX_DIP','INDEX_TIP','MIDDLE_MCP','MIDDLE_PIP','MIDDLE_DIP','MIDDLE_TIP','RING_MCP','RING_PIP','RING_DIP','RING_TIP','PINKY_MCP','PINKY_PIP','PINKY_DIP','PINKY_TIP'];
 const FORMS_URL = 'https://forms.gle/ji8KMSwBzbxXzTUv6';
 
-// ===== A/B 실험 구조 =====
 const abOrder = Math.random() < 0.5 ? ['A','B'] : ['B','A'];
-let trialIdx = 0;            // 0 = 첫 번째 실험, 1 = 두 번째 실험
-let trialResults = {};        // {A: {...}, B: {...}}
-let savedKeyframeSpec = null; // 두 실험 동일 키프레임
+let trialIdx = 0;
+let trialResults = {};
+let savedKeyframeSpec = null;
 
 let selectedHand = null, pid = '';
 let targetLm = null;
 let hands = null, camStream = null, animId = null, lastLm = null, baseData = null;
-let keyframes = [], kfIdx = 0, phase = 'idle';
+let keyframes = [], kfIdx = 0;
+// phase: 'idle' | 'matching' | 'recording' | 'playing' | 'done'
+// 핵심 변경: 'recording'은 프레임 기록 + 매칭 체크를 동시에 수행
+let phase = 'idle';
 let matchStart = 0, recStart = 0, segments = [], curSegFrames = [];
 let trialStartTime = 0;
+let videoPlaying = false; // Mode A에서 영상 재생 중인지 (recording과 독립)
 
 const rv = document.getElementById('refVideo');
 const rc = document.getElementById('refCanvas');
@@ -205,7 +206,6 @@ function getBase(action){
     }
     return null;
 }
-
 function findKeyframes(baseLm){
     if(!baseLm||baseLm.length<10) return [0, Math.floor(baseLm.length/2), baseLm.length-1];
     const vel=[];
@@ -222,7 +222,6 @@ function findKeyframes(baseLm){
     const step=Math.floor(mins.length/3);
     return [mins[0], mins[step], mins[step*2], mins[mins.length-1]];
 }
-
 function extractVideoFrame(video, canvas, cctx){
     canvas.width=video.videoWidth||720; canvas.height=video.videoHeight||720;
     cctx.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -244,20 +243,18 @@ function angleErr(uLm, tLm){
     return tot/c;
 }
 
-// ===== SEQUENCE =====
+// ===== SEQUENCE (3개 동작 전부) =====
 function genSequence(){
     if(savedKeyframeSpec){
-        // 두 번째 실험: 같은 키프레임 사용
         keyframes = savedKeyframeSpec.map(spec => {
             const baseLm = getBase(spec.action);
             return { action:spec.action, frameIdx:spec.frameIdx, time:spec.frameIdx/24, baseLm:baseLm[spec.frameIdx], allBaseLm:baseLm };
         });
     } else {
-        // 첫 번째 실험: 키프레임 생성 + 저장
+        // 3개 동작 전부 사용
         const acts = selectedHand==='left' ? ACTIONS_L : ACTIONS_R;
-        const sel = [...acts].sort(()=>Math.random()-0.5).slice(0,2);
         keyframes = [];
-        for(const action of sel){
+        for(const action of acts){
             const baseLm = getBase(action);
             if(!baseLm) continue;
             const kfIdxs = findKeyframes(baseLm);
@@ -272,129 +269,100 @@ function genSequence(){
     }).join('');
 }
 
-// ===== SHOW KEYFRAME =====
-function showKeyframe(idx){
+// ===== SHOW KEYFRAME (정지 이미지) =====
+function showKeyframeImage(idx){
     const kf = keyframes[idx];
     targetLm = kf.baseLm;
     document.getElementById('kfLabel').textContent = `자세 ${idx+1}/${keyframes.length}`;
     document.getElementById('kfInfo').textContent = `${kf.action.toUpperCase()} #${kf.frameIdx}`;
 
-    // 항상 정지 프레임으로 표시
-    rv.style.display = 'none';
-    rc.style.display = 'block';
+    rv.style.display = 'none'; rc.style.display = 'block';
     rv.src = VIDEO_BASE + kf.action + '_level3_DIP.mp4';
     rv.load();
     rv.oncanplay = () => { rv.currentTime = kf.time; };
     rv.onseeked = () => { extractVideoFrame(rv,rc,rctx); rv.oncanplay=null; rv.onseeked=null; };
 
-    for(let i=0;i<keyframes.length;i++){
-        document.getElementById('kfd'+i).className = 'kf-dot'+(i<idx?' done':i===idx?' active':'');
-    }
-    phase = 'matching'; matchStart = 0;
-    updateMatchIndicator('waiting','자세를 맞춰주세요');
-    setS('waiting','목표 자세와 같은 손 모양을 취해주세요');
+    updateDots(idx);
 }
 
+function updateDots(activeIdx){
+    for(let i=0;i<keyframes.length;i++){
+        document.getElementById('kfd'+i).className = 'kf-dot'+(i<activeIdx?' done':i===activeIdx?' active':'');
+    }
+}
 function updateMatchIndicator(cls, text){
     const mi=document.getElementById('matchInd'); mi.className='match-indicator '+cls; mi.textContent=text;
 }
 function setS(t,h){ const s=document.getElementById('statusBar'); s.className='status-bar '+t; s.innerHTML=h; }
 
-// ===== MODE A: 영상 재생 후 다음 키프레임으로 =====
-function playVideoToNextKeyframe(){
-    phase = 'playing';
-    const fromKf = keyframes[kfIdx];
-    kfIdx++;
-    if(kfIdx >= keyframes.length){ finishTrial(); return; }
-    const toKf = keyframes[kfIdx];
-
-    updateMatchIndicator('playing','▶ 영상 재생 중...');
-    setS('playing','영상을 보면서 다음 자세를 확인하세요');
-
-    // 같은 동작이면 영상 재생, 다른 동작이면 새 영상 로드
-    if(fromKf.action === toKf.action){
-        rv.style.display = 'block'; rc.style.display = 'none';
-        rv.currentTime = fromKf.time;
-        rv.play();
-        const stopTime = toKf.time;
-        const checkLoop = () => {
-            if(rv.currentTime >= stopTime - 0.05){
-                rv.pause();
-                rv.style.display = 'none'; rc.style.display = 'block';
-                extractVideoFrame(rv,rc,rctx);
-                onVideoSegmentDone();
-            } else requestAnimationFrame(checkLoop);
-        };
-        checkLoop();
-    } else {
-        // 다른 동작: 바로 다음 키프레임 정지 이미지 표시
-        rv.src = VIDEO_BASE + toKf.action + '_level3_DIP.mp4';
-        rv.load();
-        rv.oncanplay = () => { rv.currentTime = toKf.time; };
-        rv.onseeked = () => {
-            extractVideoFrame(rv,rc,rctx);
-            rv.oncanplay=null; rv.onseeked=null;
-            onVideoSegmentDone();
-        };
-    }
-
-    document.getElementById('kfLabel').textContent = `자세 ${kfIdx+1}/${keyframes.length}`;
-    document.getElementById('kfInfo').textContent = `${toKf.action.toUpperCase()} #${toKf.frameIdx}`;
-    for(let i=0;i<keyframes.length;i++){
-        document.getElementById('kfd'+i).className = 'kf-dot'+(i<kfIdx?' done':i===kfIdx?' active':'');
-    }
+// ===== 첫 키프레임 매칭 완료 → 전환 기록 시작 =====
+function onFirstKeyframeMatched(){
+    document.getElementById('kfd0').className = 'kf-dot done';
+    beginNextTransition();
 }
 
-function onVideoSegmentDone(){
-    // 영상 재생 완료 → 사용자가 자세 매칭하면 전환 기록 시작
-    targetLm = keyframes[kfIdx].baseLm;
-    phase = 'matching'; matchStart = 0;
-    updateMatchIndicator('waiting','자세를 맞춰주세요');
-    setS('waiting','영상이 멈췄습니다. 현재 자세를 따라하세요');
-}
-
-// ===== MODE B: 바로 다음 키프레임 이미지 =====
-function showNextKeyframeImage(){
-    kfIdx++;
-    if(kfIdx >= keyframes.length){ finishTrial(); return; }
-    const kf = keyframes[kfIdx];
-    targetLm = kf.baseLm;
-
-    rv.src = VIDEO_BASE + kf.action + '_level3_DIP.mp4';
-    rv.load();
-    rv.oncanplay = () => { rv.currentTime = kf.time; };
-    rv.onseeked = () => { extractVideoFrame(rv,rc,rctx); rv.oncanplay=null; rv.onseeked=null; };
-
-    document.getElementById('kfLabel').textContent = `자세 ${kfIdx+1}/${keyframes.length}`;
-    document.getElementById('kfInfo').textContent = `${kf.action.toUpperCase()} #${kf.frameIdx}`;
-    for(let i=0;i<keyframes.length;i++){
-        document.getElementById('kfd'+i).className = 'kf-dot'+(i<kfIdx?' done':i===kfIdx?' active':'');
-    }
-    phase = 'matching'; matchStart = 0;
-    updateMatchIndicator('waiting','자세를 맞춰주세요');
-    setS('waiting','다음 자세를 따라하세요');
-}
-
-// ===== TRANSITION RECORDING =====
-function startTransitionRecording(){
+// ===== 전환 시작 (핵심 함수) =====
+function beginNextTransition(){
+    // 기록 시작
     phase = 'recording';
+    videoPlaying = false;
     recStart = performance.now();
     curSegFrames = [];
     document.getElementById('kfd'+kfIdx).className = 'kf-dot rec';
-    updateMatchIndicator('recording','전환 기록 중...');
-    setS('recording','다음 자세로 전환해 주세요');
+
+    // kfIdx 증가 → 다음 목표
+    kfIdx++;
+    if(kfIdx >= keyframes.length){ finishTrial(); return; }
+
+    targetLm = keyframes[kfIdx].baseLm;
+    document.getElementById('kfLabel').textContent = `자세 ${kfIdx+1}/${keyframes.length}`;
+    document.getElementById('kfInfo').textContent = `${keyframes[kfIdx].action.toUpperCase()} #${keyframes[kfIdx].frameIdx}`;
+    updateDots(kfIdx);
 
     const mode = currentMode();
+
     if(mode === 'A'){
-        playVideoToNextKeyframe();
-        // Mode A: 영상 재생 + 기록 동시 진행
-        // 매칭은 영상 끝난 후 onVideoSegmentDone에서 시작
+        // Mode A: 영상 재생하면서 기록
+        updateMatchIndicator('playing','▶ 영상 재생 중...');
+        setS('playing','영상을 보면서 다음 자세를 준비하세요');
+
+        const fromKf = keyframes[kfIdx-1];
+        const toKf = keyframes[kfIdx];
+
+        if(fromKf.action === toKf.action){
+            // 같은 동작: 영상 재생
+            rv.style.display = 'block'; rc.style.display = 'none';
+            videoPlaying = true;
+            rv.currentTime = fromKf.time;
+            rv.play();
+            const stopTime = toKf.time;
+            const checkLoop = () => {
+                if(rv.currentTime >= stopTime - 0.05){
+                    rv.pause();
+                    rv.style.display = 'none'; rc.style.display = 'block';
+                    extractVideoFrame(rv,rc,rctx);
+                    videoPlaying = false;
+                    // 영상 끝 → 이제 매칭 대기 (phase는 recording 유지!)
+                    updateMatchIndicator('recording','자세를 맞춰주세요');
+                    setS('recording','영상이 멈췄습니다. 자세를 따라하세요');
+                } else requestAnimationFrame(checkLoop);
+            };
+            checkLoop();
+        } else {
+            // 다른 동작: 다음 키프레임 이미지 바로 표시
+            showKeyframeImage(kfIdx);
+            updateMatchIndicator('recording','자세를 맞춰주세요');
+            setS('recording','다음 자세로 전환해 주세요');
+        }
     } else {
-        // Mode B: 바로 다음 키프레임 이미지 표시
-        showNextKeyframeImage();
+        // Mode B: 다음 키프레임 이미지만 표시 (phase = recording 유지!)
+        showKeyframeImage(kfIdx);
+        updateMatchIndicator('recording','자세를 맞춰주세요');
+        setS('recording','다음 자세로 전환해 주세요');
     }
 }
 
+// ===== 전환 매칭 완료 =====
 function onTransitionMatched(){
     segments.push({
         fromKf: kfIdx-1, toKf: kfIdx,
@@ -411,7 +379,8 @@ function onTransitionMatched(){
         setS('complete','✅ 모든 동작이 완료되었습니다!');
         setTimeout(finishTrial, 500);
     } else {
-        startTransitionRecording();
+        // 다음 전환
+        beginNextTransition();
     }
 }
 
@@ -423,7 +392,6 @@ async function initMP(){
     await hands.initialize();
     document.getElementById('loadingOverlay').classList.add('hidden');
 }
-
 async function initCam(){
     try{
         camStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:640},height:{ideal:480}}});
@@ -441,7 +409,7 @@ function onRes(r){
     const has = r.multiHandLandmarks && r.multiHandLandmarks.length > 0;
     if(!has){
         lastLm=null;
-        if(phase==='recording'||phase==='playing') curSegFrames.push({t:performance.now()-recStart, lm:null});
+        if(phase==='recording') curSegFrames.push({t:performance.now()-recStart, lm:null});
         return;
     }
 
@@ -452,27 +420,37 @@ function onRes(r){
 
     const userLm = lm.map(l=>[l.x, l.y]);
 
-    // 매칭 체크
+    // ===== 1) 첫 키프레임 매칭 (phase === 'matching') =====
     if(phase==='matching' && kfIdx<keyframes.length && targetLm){
         const uPP=ppSingle(userLm), tPP=ppSingle(targetLm);
         const err=angleErr(uPP, tPP);
         if(err < MATCH_ANGLE_THRESH){
             updateMatchIndicator('matched','✅ 자세가 맞습니다!');
-            if(kfIdx===0){
-                document.getElementById('kfd0').className='kf-dot done';
-                startTransitionRecording();
-            } else {
-                onTransitionMatched();
-            }
+            onFirstKeyframeMatched();
         } else {
             updateMatchIndicator('waiting',`자세를 맞춰주세요 (오차: ${err.toFixed(0)}°)`);
         }
     }
 
-    // 기록 중 (Mode A의 playing 포함)
-    if(phase==='recording' || phase==='playing'){
+    // ===== 2) 전환 기록 중 (phase === 'recording') =====
+    // 프레임 기록 + 매칭 체크를 동시에 수행
+    if(phase==='recording'){
         curSegFrames.push({t:performance.now()-recStart, lm:userLm});
         document.getElementById('frameCounter').textContent = curSegFrames.length+' 프레임';
+
+        // Mode A 영상 재생 중에는 매칭 체크 안 함 (영상 끝나야 매칭)
+        if(videoPlaying) return;
+
+        // 다음 키프레임과 매칭 체크
+        if(kfIdx < keyframes.length && targetLm){
+            const uPP=ppSingle(userLm), tPP=ppSingle(targetLm);
+            const err=angleErr(uPP, tPP);
+            if(err < MATCH_ANGLE_THRESH){
+                updateMatchIndicator('matched','✅ 자세가 맞습니다!');
+                onTransitionMatched();
+            }
+            // recording 중에는 오차 표시 안 함 (이미 recording indicator 표시 중)
+        }
     }
 }
 
@@ -483,10 +461,9 @@ document.getElementById('inputPid').addEventListener('input', checkReady);
 function showScr(id){ document.querySelectorAll('.screen,.trial-container').forEach(s=>s.classList.remove('active')); document.getElementById(id).classList.add('active'); }
 
 function updateModeBadge(){
-    const badge = document.getElementById('modeBadge');
-    const mode = currentMode();
-    badge.style.display = 'block';
-    badge.className = 'mode-badge mode'+mode;
+    const badge=document.getElementById('modeBadge'), mode=currentMode();
+    badge.style.display='block';
+    badge.className='mode-badge mode'+mode;
     badge.textContent = mode==='A' ? '방안 A — 영상 재생' : '방안 B — 프레임만';
 }
 
@@ -503,10 +480,17 @@ function runTrial(){
     updateModeBadge();
     genSequence();
     segments=[]; kfIdx=0; curSegFrames=[]; trialStartTime=performance.now();
+    videoPlaying=false;
     document.getElementById('frameCounter').textContent='0 프레임';
     rv.style.display='none'; rc.style.display='block';
     showScr('screenTrial');
-    showKeyframe(0);
+
+    // 첫 키프레임 표시 + matching 모드
+    showKeyframeImage(0);
+    phase = 'matching';
+    matchStart = 0;
+    updateMatchIndicator('waiting','첫 자세를 맞춰주세요');
+    setS('waiting','목표 자세와 같은 손 모양을 취해주세요');
 }
 
 function finishTrial(){
@@ -515,7 +499,6 @@ function finishTrial(){
     trialResults[mode] = { ...scores, segments:segments.slice(), duration:performance.now()-trialStartTime };
 
     if(trialIdx === 0){
-        // 중간 화면
         trialIdx = 1;
         const nextMode = currentMode();
         document.getElementById('interTitle').textContent = `✅ ${mode==='A'?'방안 A':'방안 B'} 완료!`;
@@ -571,14 +554,16 @@ function showFinalResult(){
     document.getElementById('rAnB').textContent = (b.sA||0).toFixed(3);
     document.getElementById('rFinA').textContent = (a.captcha||0).toFixed(3);
     document.getElementById('rFinB').textContent = (b.captcha||0).toFixed(3);
+    document.getElementById('rTimeA').textContent = ((a.duration||0)/1000).toFixed(1)+'초';
+    document.getElementById('rTimeB').textContent = ((b.duration||0)/1000).toFixed(1)+'초';
 
     const v=document.getElementById('verdict');
     const diff = (b.captcha||0) - (a.captcha||0);
-    v.textContent = `방안 A: ${(a.captcha||0).toFixed(3)} / 방안 B: ${(b.captcha||0).toFixed(3)} (차이: ${diff>0?'+':''}${diff.toFixed(3)})`;
+    v.textContent = `A: ${(a.captcha||0).toFixed(3)} / B: ${(b.captcha||0).toFixed(3)} (차이: ${diff>0?'+':''}${diff.toFixed(3)})`;
 
     // Auto-download
     const result = {
-        experimentInfo: { participantId:pid, selectedHand, timestamp:Date.now(), abOrder, version:'ab_comparison' },
+        experimentInfo: { participantId:pid, selectedHand, timestamp:Date.now(), abOrder, version:'ab_v2_3actions' },
         keyframeSpec: savedKeyframeSpec,
         trialA: { mode:'A', ...trialResults['A'], segments: trialResults['A']?.segments?.map(seg=>({ fromKf:seg.fromKf, toKf:seg.toKf, fromAction:seg.fromAction, toAction:seg.toAction, totalFrames:seg.frames.length, detectedFrames:seg.frames.filter(f=>f.lm!==null).length, duration:seg.duration, frames:seg.frames })) },
         trialB: { mode:'B', ...trialResults['B'], segments: trialResults['B']?.segments?.map(seg=>({ fromKf:seg.fromKf, toKf:seg.toKf, fromAction:seg.fromAction, toAction:seg.toAction, totalFrames:seg.frames.length, detectedFrames:seg.frames.filter(f=>f.lm!==null).length, duration:seg.duration, frames:seg.frames })) }
@@ -587,6 +572,9 @@ function showFinalResult(){
     const url=URL.createObjectURL(blob);
     const dl=document.createElement('a'); dl.href=url; dl.download=`captcha_ab_${pid}_${Date.now()}.json`; dl.click();
     URL.revokeObjectURL(url);
+
+    if(animId) cancelAnimationFrame(animId);
+    if(camStream) camStream.getTracks().forEach(t=>t.stop());
 
     showScr('screenResult');
     let countdown=8;
