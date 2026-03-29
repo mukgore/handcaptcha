@@ -138,8 +138,8 @@
 const VIDEO_BASE = 'https://mukgore.github.io/handcaptcha/';
 const ACTIONS_L = ['l1','l2','l3'], ACTIONS_R = ['r1','r2','r3'];
 
-const MATCH_ANGLE_THRESH = 32;      // 자세 맞춤 오차 허용치 (32도 이하)
-const GRACE_PERIOD_MS = 180;        // 짧은 인식 끊김 관대 처리
+const MATCH_ANGLE_THRESH = 38;      // ← 32 → 38로 더 완화
+const GRACE_PERIOD_MS = 200;
 
 const THRESHOLD = 0.25;
 const W2 = {da:0.38, ac:0.37, a:0.25};
@@ -171,7 +171,7 @@ async function loadBase(){
         try{
             const r = await fetch('landmarks_base.json');
             baseData = await r.json();
-        } catch(e2){ console.error('No base data'); }
+        } catch(e2){}
     }
 }
 
@@ -181,8 +181,7 @@ function getBase(action){
         if(k.startsWith(action + '_baseline')){
             const d = baseData[k], info = d.video_info || {};
             const w = info.width || 720, h = info.height || 720;
-            return d.frames
-                .filter(f => f.detected && f.landmarks_px)
+            return d.frames.filter(f => f.detected && f.landmarks_px)
                 .map(f => {
                     const lm = f.landmarks_px;
                     return LN.map(n => [lm[n].x/w, lm[n].y/h]);
@@ -192,7 +191,6 @@ function getBase(action){
     return null;
 }
 
-// ===== KEYFRAME & UTILS =====
 function findKeyframes(baseLm){
     if(!baseLm || baseLm.length < 10) return [0, Math.floor(baseLm.length/2), baseLm.length-1];
     const vel = [];
@@ -256,7 +254,6 @@ function ppSingle(lm){
     return n.map(p => [p[0]/h, p[1]/h]);
 }
 
-// ===== SEQUENCE =====
 function genSequence(){
     const acts = selectedHand === 'left' ? ACTIONS_L : ACTIONS_R;
     const sel = [...acts].sort(() => Math.random()-0.5).slice(0, 2);
@@ -357,14 +354,14 @@ function onTransitionMatched(){
     }
 }
 
-// ===== MEDIAPIPE =====
+// ===== MEDIAPIPE - 개선된 매칭 로직 =====
 async function initMP(){
     hands = new Hands({locateFile: f => `https://unpkg.com/@mediapipe/hands@0.4.1675469240/${f}`});
     hands.setOptions({
         maxNumHands: 1,
         modelComplexity: 1,
-        minDetectionConfidence: 0.4,
-        minTrackingConfidence: 0.45
+        minDetectionConfidence: 0.35,   // 더 관대하게
+        minTrackingConfidence: 0.4
     });
     hands.onResults(onRes);
     await hands.initialize();
@@ -413,7 +410,7 @@ function onRes(r){
 
     const userLm = lm.map(l => [l.x, l.y]);
 
-    // ==================== 핵심 변경: 초록색 뜨면 바로 통과 ====================
+    // ==================== 개선된 매칭 로직 ====================
     if(phase === 'matching' && kfIdx < keyframes.length && targetLm){
         const target = keyframes[kfIdx].baseLm;
         const uPP = ppSingle(userLm);
@@ -421,10 +418,10 @@ function onRes(r){
         const err = angleErr(uPP, tPP);
 
         if(err < MATCH_ANGLE_THRESH){
-            // 초록색 표시
+            // 오차가 기준 이하 → 바로 초록색 + 다음 단계 진행
             updateMatchIndicator('matched', '✅ 자세가 맞습니다!');
-
-            // 바로 다음 단계로 진행 (hold 시간 제거)
+            
+            // 즉시 다음 단계로
             if(kfIdx === 0){
                 document.getElementById('kfd0').className = 'kf-dot done';
                 startTransitionRecording();
@@ -432,17 +429,12 @@ function onRes(r){
                 onTransitionMatched();
             }
         } else {
-            // Grace period 적용 (짧은 끊김은 무시)
-            if(matchStart > 0 && (performance.now() - matchStart) < GRACE_PERIOD_MS){
-                updateMatchIndicator('matched', '✅ 자세가 맞습니다!');
-            } else {
-                matchStart = 0;
-                updateMatchIndicator('waiting', `자세를 맞춰주세요 (오차: ${err.toFixed(0)}°)`);
-            }
+            // 오차가 큰 경우
+            matchStart = 0;
+            updateMatchIndicator('waiting', `자세를 맞춰주세요 (오차: ${err.toFixed(0)}°)`);
         }
     }
 
-    // Recording 단계 (다음 자세로 전환하면서 맞추는 부분)
     if(phase === 'recording'){
         curSegFrames.push({t: performance.now()-recStart, lm: userLm});
         document.getElementById('frameCounter').textContent = curSegFrames.length + ' 프레임';
@@ -456,14 +448,12 @@ function onRes(r){
             if(err < MATCH_ANGLE_THRESH){
                 updateMatchIndicator('matched', '✅ 자세가 맞습니다!');
                 onTransitionMatched();
-            } else {
-                matchStart = 0;
             }
         }
     }
 }
 
-// ===== UI HELPERS =====
+// UI Helpers
 function setS(t, h){
     const s = document.getElementById('statusBar');
     s.className = 'status-bar ' + t;
@@ -499,7 +489,7 @@ async function startCaptcha(){
     showKeyframe(0);
 }
 
-// ===== METRICS (compute 포함) =====
+// METRICS 함수들 (pp, rs, mA, mDA, mAc, es, compute) — 이전과 동일
 function pp(f){
     if(!f || f.length < 3) return null;
     return f.map(fr => {
@@ -519,10 +509,7 @@ function rs(d, n){
         const s = t / (n-1) * (d.length-1);
         const lo = Math.floor(s), hi = Math.min(lo+1, d.length-1);
         const f = s - lo;
-        r.push(d[lo].map((p,i) => [
-            p[0]*(1-f) + d[hi][i][0]*f,
-            p[1]*(1-f) + d[hi][i][1]*f
-        ]));
+        r.push(d[lo].map((p,i) => [p[0]*(1-f) + d[hi][i][0]*f, p[1]*(1-f) + d[hi][i][1]*f]));
     }
     return r;
 }
