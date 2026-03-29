@@ -450,52 +450,44 @@ async function initCam(){
 }
 
 function onRes(r) {
-    ctx.save();
-    ctx.clearRect(0, 0, cc.width, cc.height);
-
-    // 1. 현재 사용 중인 카메라가 전면(user)인지 확인
-    // 후면 카메라일 경우 보통 'environment'로 설정됩니다.
+    // 1. 카메라 설정 확인
     const videoTrack = camStream ? camStream.getVideoTracks()[0] : null;
     const settings = videoTrack ? videoTrack.getSettings() : {};
-    // facingMode 정보가 없으면 label을 통해 front/back 여부를 추측합니다.
-    const isFrontCamera = settings.facingMode === 'user' || 
-                          (videoTrack && videoTrack.label.toLowerCase().includes('front')) ||
-                          (!settings.facingMode && !videoTrack.label.toLowerCase().includes('back'));
+    // 전면 카메라 여부 판별
+    const isFront = settings.facingMode === 'user' || (videoTrack && videoTrack.label.toLowerCase().includes('front'));
 
-    // 2. 전면 카메라(셀카)일 때만 좌우 반전(거울모드) 적용
-    // 후면 카메라는 이미 정방향이므로 뒤집지 않습니다.
-    if (isFrontCamera) {
+    ctx.save();
+    ctx.clearRect(0, 0, cc.width, cc.height);
+    
+    // 2. 전면일 때만 화면 반전 (거울 모드)
+    if (isFront) {
         ctx.translate(cc.width, 0);
         ctx.scale(-1, 1);
     }
-
     ctx.drawImage(r.image, 0, 0, cc.width, cc.height);
     ctx.restore();
 
     const has = r.multiHandLandmarks && r.multiHandLandmarks.length > 0;
     if (!has) {
         lastLm = null;
-        if (phase === 'recording') {
-            curSegFrames.push({ t: performance.now() - recStart, lm: null });
-        }
+        if (phase === 'recording') curSegFrames.push({ t: performance.now() - recStart, lm: null });
         return;
     }
 
     const lm = r.multiHandLandmarks[0];
     lastLm = lm;
 
-    // 3. 시각화 및 데이터 좌표 계산 (카메라 모드에 따라 x축 반전 여부 결정)
-    // 전면이면 거울처럼 보이게 1-x, 후면이면 정방향 그대로 x 사용
-    const getOrientedX = (val) => isFrontCamera ? 1 - val : val;
+    // 3. 좌표 계산 (화면 방향과 일치시킴)
+    const getX = (val) => isFront ? 1 - val : val;
 
-    // 화면 위 관절 포인트 그리기
-    drawConnectors(ctx, lm.map(l => ({ x: getOrientedX(l.x), y: l.y, z: l.z })), HAND_CONNECTIONS, { color: '#00FF88', lineWidth: 2 });
-    drawLandmarks(ctx, lm.map(l => ({ x: getOrientedX(l.x), y: l.y, z: l.z })), { color: '#FF4444', lineWidth: 1, radius: 3 });
+    // 스켈레톤 그리기
+    drawConnectors(ctx, lm.map(l => ({ x: getX(l.x), y: l.y, z: l.z })), HAND_CONNECTIONS, { color: '#00FF88', lineWidth: 2 });
+    drawLandmarks(ctx, lm.map(l => ({ x: getX(l.x), y: l.y, z: l.z })), { color: '#FF4444', lineWidth: 1, radius: 3 });
 
-    // 4. 저장 및 판정용 좌표 (화면 방향과 100% 일치됨)
-    const userLm = lm.map(l => [getOrientedX(l.x), l.y]);
+    // 저장 및 판정용 좌표
+    const userLm = lm.map(l => [getX(l.x), l.y]);
 
-    // 자세 매칭 로직 (userLm 기준)
+    // --- 여기서부터는 기존 방안 A/B 로직 그대로 유지 ---
     if (phase === 'matching' && kfIdx < keyframes.length && targetLm) {
         const uPP = ppSingle(userLm), tPP = ppSingle(targetLm);
         const err = angleErr(uPP, tPP);
@@ -507,12 +499,11 @@ function onRes(r) {
         }
     }
 
-    // 실험 기록 로직
     if (phase === 'recording') {
         curSegFrames.push({ t: performance.now() - recStart, lm: userLm });
         document.getElementById('frameCounter').textContent = curSegFrames.length + ' 프레임';
 
-        if (videoPlaying || fading) return;
+        if (videoPlaying || fading) return; // 방안 A 영상 재생 중에는 판정 스킵
 
         if (kfIdx < keyframes.length && targetLm) {
             const uPP = ppSingle(userLm), tPP = ppSingle(targetLm);
@@ -524,7 +515,6 @@ function onRes(r) {
         }
     }
 }
-
 // ===== UI =====
 function selectHand(h,b){ selectedHand=h; document.querySelectorAll('.hand-btn').forEach(x=>x.classList.remove('selected')); b.classList.add('selected'); checkReady(); }
 function checkReady(){ document.getElementById('btnStart').disabled=!(selectedHand); }
