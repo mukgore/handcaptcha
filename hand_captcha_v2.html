@@ -138,9 +138,8 @@
 const VIDEO_BASE = 'https://mukgore.github.io/handcaptcha/';
 const ACTIONS_L = ['l1','l2','l3'], ACTIONS_R = ['r1','r2','r3'];
 
-const MATCH_ANGLE_THRESH = 32;     
-const MATCH_HOLD_MS = 400;         
-const GRACE_PERIOD_MS = 200;       
+const MATCH_ANGLE_THRESH = 32;      // 자세 맞춤 오차 허용치 (32도 이하)
+const GRACE_PERIOD_MS = 180;        // 짧은 인식 끊김 관대 처리
 
 const THRESHOLD = 0.25;
 const W2 = {da:0.38, ac:0.37, a:0.25};
@@ -193,7 +192,7 @@ function getBase(action){
     return null;
 }
 
-// ===== KEYFRAME DETECTION =====
+// ===== KEYFRAME & UTILS =====
 function findKeyframes(baseLm){
     if(!baseLm || baseLm.length < 10) return [0, Math.floor(baseLm.length/2), baseLm.length-1];
     const vel = [];
@@ -230,7 +229,6 @@ function extractVideoFrame(video, canvas, ctx){
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 }
 
-// ===== POSE MATCHING =====
 function angleErr(userLm, targetLm){
     let tot = 0, c = 0;
     for(const [p,j,d] of AT){
@@ -258,7 +256,7 @@ function ppSingle(lm){
     return n.map(p => [p[0]/h, p[1]/h]);
 }
 
-// ===== GENERATE SEQUENCE =====
+// ===== SEQUENCE =====
 function genSequence(){
     const acts = selectedHand === 'left' ? ACTIONS_L : ACTIONS_R;
     const sel = [...acts].sort(() => Math.random()-0.5).slice(0, 2);
@@ -280,7 +278,6 @@ function genSequence(){
     }).join('');
 }
 
-// ===== SHOW KEYFRAME =====
 function showKeyframe(idx){
     const kf = keyframes[idx];
     targetLm = kf.baseLm;
@@ -351,7 +348,7 @@ function onTransitionMatched(){
         phase = 'done';
         updateMatchIndicator('matched', '✅ 완료!');
         setS('complete', '✅ 모든 동작이 완료되었습니다!');
-        setTimeout(compute, 500);
+        setTimeout(compute, 300);
     } else {
         phase = 'matching';
         matchStart = 0;
@@ -416,7 +413,7 @@ function onRes(r){
 
     const userLm = lm.map(l => [l.x, l.y]);
 
-    // ==================== 개선된 Matching 로직 ====================
+    // ==================== 핵심 변경: 초록색 뜨면 바로 통과 ====================
     if(phase === 'matching' && kfIdx < keyframes.length && targetLm){
         const target = keyframes[kfIdx].baseLm;
         const uPP = ppSingle(userLm);
@@ -424,27 +421,20 @@ function onRes(r){
         const err = angleErr(uPP, tPP);
 
         if(err < MATCH_ANGLE_THRESH){
-            if(matchStart === 0) matchStart = performance.now();
+            // 초록색 표시
+            updateMatchIndicator('matched', '✅ 자세가 맞습니다!');
 
-            const held = performance.now() - matchStart;
-            const progress = Math.min(100, Math.round(held / MATCH_HOLD_MS * 100));
-            updateMatchIndicator('matched', `맞춤 중... ${progress}%`);
-
-            if(held >= MATCH_HOLD_MS){
-                matchStart = 0;
-                if(kfIdx === 0){
-                    document.getElementById('kfd0').className = 'kf-dot done';
-                    startTransitionRecording();
-                } else {
-                    onTransitionMatched();
-                }
+            // 바로 다음 단계로 진행 (hold 시간 제거)
+            if(kfIdx === 0){
+                document.getElementById('kfd0').className = 'kf-dot done';
+                startTransitionRecording();
+            } else {
+                onTransitionMatched();
             }
         } else {
-            // Grace period: 한 번 진행 중이었으면 짧은 오차는 무시
+            // Grace period 적용 (짧은 끊김은 무시)
             if(matchStart > 0 && (performance.now() - matchStart) < GRACE_PERIOD_MS){
-                const held = performance.now() - matchStart;
-                const progress = Math.min(100, Math.round(held / MATCH_HOLD_MS * 100));
-                updateMatchIndicator('matched', `맞춤 중... ${progress}%`);
+                updateMatchIndicator('matched', '✅ 자세가 맞습니다!');
             } else {
                 matchStart = 0;
                 updateMatchIndicator('waiting', `자세를 맞춰주세요 (오차: ${err.toFixed(0)}°)`);
@@ -452,6 +442,7 @@ function onRes(r){
         }
     }
 
+    // Recording 단계 (다음 자세로 전환하면서 맞추는 부분)
     if(phase === 'recording'){
         curSegFrames.push({t: performance.now()-recStart, lm: userLm});
         document.getElementById('frameCounter').textContent = curSegFrames.length + ' 프레임';
@@ -463,10 +454,8 @@ function onRes(r){
             const err = angleErr(uPP, tPP);
 
             if(err < MATCH_ANGLE_THRESH){
-                if(matchStart === 0) matchStart = performance.now();
-                if(performance.now() - matchStart >= MATCH_HOLD_MS){
-                    onTransitionMatched();
-                }
+                updateMatchIndicator('matched', '✅ 자세가 맞습니다!');
+                onTransitionMatched();
             } else {
                 matchStart = 0;
             }
@@ -510,7 +499,7 @@ async function startCaptcha(){
     showKeyframe(0);
 }
 
-// ===== METRICS =====
+// ===== METRICS (compute 포함) =====
 function pp(f){
     if(!f || f.length < 3) return null;
     return f.map(fr => {
@@ -646,7 +635,6 @@ function compute(){
 
     const fin = sDA * W2.da + sAc * W2.ac + sA * W2.a;
 
-    // 결과 표시
     document.getElementById('resSegments').textContent = `${totalSegments}개 전환 구간`;
     document.getElementById('resDetection').textContent = `${dC}/${tF} (${(dR*100).toFixed(0)}%)`;
     document.getElementById('resDtwAngle').textContent = sDA.toFixed(3);
@@ -666,7 +654,6 @@ function compute(){
     if(animId) cancelAnimationFrame(animId);
     if(camStream) camStream.getTracks().forEach(t => t.stop());
 
-    // JSON 다운로드
     const result = {
         experimentInfo: {participantId: pid, selectedHand, timestamp: Date.now(), version: 'v2_motion_eval'},
         keyframes: keyframes.map(kf => ({action: kf.action, frameIdx: kf.frameIdx})),
@@ -695,10 +682,8 @@ function compute(){
     a.click();
     URL.revokeObjectURL(url);
 
-    // 결과 화면 표시
     showScr('screenResult');
 
-    // 5초 후 설문으로 이동
     let countdown = 5;
     const msg = document.getElementById('redirectMsg');
     msg.textContent = `${countdown}초 후 사용성 설문으로 이동합니다...`;
