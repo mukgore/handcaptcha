@@ -1,359 +1,225 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>손 동작 CAPTCHA v2 — 동작 평가</title>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
-    <script src="https://unpkg.com/@mediapipe/hands@0.4.1675469240/hands.js" crossorigin="anonymous"></script>
-    <script src="https://unpkg.com/@mediapipe/drawing_utils@0.3.1675466124/drawing_utils.js" crossorigin="anonymous"></script>
-    <style>
-        /* CSS 스타일은 동일하므로 생략하거나 기존 것 사용 가능 */
-        *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
-        :root{--bg:#f8f9fb;--surface:#fff;--primary:#2563eb;--primary-hover:#1d4ed8;--danger:#dc2626;--success:#16a34a;--text:#1e293b;--text-secondary:#64748b;--border:#e2e8f0;--radius:12px;--shadow:0 1px 3px rgba(0,0,0,.08),0 4px 12px rgba(0,0,0,.04);--accent:#f59e0b}
-        body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text);height:100dvh;overflow:hidden;display:flex;flex-direction:column}
-        .header{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100}
-        .header-icon{width:32px;height:32px;background:var(--primary);border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:16px;font-weight:700}
-        .header-title{font-weight:700;font-size:16px}
-        .screen{display:none;flex:1;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;overflow-y:auto;min-height:0}
-        .screen.active{display:flex}
-        .card{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);padding:40px;max-width:560px;width:100%;text-align:center}
-        .card h1{font-size:24px;font-weight:700;margin-bottom:8px}
-        .card p{font-size:15px;color:var(--text-secondary);line-height:1.7;margin-bottom:16px}
-        .btn{display:inline-flex;align-items:center;justify-content:center;padding:12px 32px;border-radius:10px;font-family:inherit;font-size:15px;font-weight:600;border:none;cursor:pointer;transition:all .15s;gap:8px}
-        .btn:active{transform:scale(.97)}.btn-primary{background:var(--primary);color:#fff}.btn-primary:hover{background:var(--primary-hover)}.btn:disabled{opacity:.5;cursor:not-allowed;transform:none}.btn-lg{padding:14px 40px;font-size:16px}
-        .hand-select-group{display:flex;gap:16px;justify-content:center;margin:24px 0}
-        .hand-btn{flex:1;max-width:180px;padding:24px 16px;border-radius:var(--radius);border:2px solid var(--border);background:var(--surface);cursor:pointer;transition:all .15s;text-align:center}
-        .hand-btn:hover{border-color:var(--primary)}.hand-btn.selected{border-color:var(--primary);background:#eff6ff}
-        .hand-btn .hand-emoji{font-size:40px;margin-bottom:8px}.hand-btn .hand-label{font-weight:600;font-size:15px}
-        .input-group{margin:16px auto;max-width:300px;text-align:left}
-        .input-group label{font-size:13px;color:var(--text-secondary);display:block;margin-bottom:4px;font-weight:500}
-        .input-group input{width:100%;padding:10px 14px;border:2px solid var(--border);border-radius:8px;font-size:15px;font-family:inherit;transition:border .15s}
-        .input-group input:focus{outline:none;border-color:var(--primary)}
-        .trial-container{display:none;flex:1;flex-direction:column;width:100%;min-height:0;overflow:hidden}
-        .trial-container.active{display:flex}
-        .trial-content{display:flex;flex:1;gap:16px;padding:16px;overflow:hidden}
-        .trial-panel{flex:1;display:flex;flex-direction:column;background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;min-height:0}
-        .panel-header{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
-        .panel-title{font-weight:600;font-size:14px}
-        .panel-badge{font-size:12px;padding:3px 10px;background:#f1f5f9;border-radius:20px;color:var(--text-secondary);font-weight:500}
-        .ref-area{flex:1;display:flex;align-items:center;justify-content:center;background:#0f172a;position:relative;min-height:0}
-        .ref-area canvas{width:100%;height:100%;object-fit:contain}
-        .ref-area video{display:none}
-        .keyframe-label{position:absolute;top:12px;left:12px;background:rgba(0,0,0,.7);color:#fff;font-size:12px;padding:4px 10px;border-radius:6px;font-weight:500;z-index:5}
-        .match-indicator{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);padding:6px 16px;border-radius:20px;font-size:13px;font-weight:600;z-index:5;transition:all .2s}
-        .match-indicator.waiting{background:rgba(245,158,11,.9);color:#fff}
-        .match-indicator.matched{background:rgba(22,163,74,.9);color:#fff}
-        .match-indicator.recording{background:rgba(220,38,38,.9);color:#fff;animation:pulse 1s infinite}
-        @keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
-        .camera-area{flex:1;display:flex;align-items:center;justify-content:center;background:#0f172a;position:relative;min-height:0}
-        .camera-area canvas{width:100%;height:100%;object-fit:contain}
-        .camera-area video{display:none}
-        .camera-placeholder{color:#94a3b8;text-align:center;font-size:14px;padding:24px}
-        .kf-progress{display:flex;gap:8px;justify-content:center;padding:10px;flex-shrink:0}
-        .kf-step{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text-secondary)}
-        .kf-dot{width:28px;height:28px;border-radius:50%;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;transition:all .3s}
-        .kf-dot.active{border-color:var(--accent);background:#fef3c7;color:#92400e}
-        .kf-dot.done{border-color:var(--success);background:#dcfce7;color:#166534}
-        .kf-dot.rec{border-color:var(--danger);background:#fee2e2;color:#991b1b;animation:pulse 1s infinite}
-        .kf-arrow{color:var(--border);font-size:16px}
-        .status-bar{padding:8px 16px;text-align:center;font-size:13px;font-weight:500;flex-shrink:0}
-        .status-bar.waiting{background:#fef3c7;color:#92400e}
-        .status-bar.detecting{background:#dbeafe;color:#1e40af}
-        .status-bar.recording{background:#fee2e2;color:#991b1b}
-        .status-bar.complete{background:#dcfce7;color:#166534;font-weight:700}
-        .loading-overlay{position:fixed;inset:0;background:rgba(255,255,255,.9);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:1000;gap:16px}
-        .loading-overlay.hidden{display:none}
-        .spinner{width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--primary);border-radius:50%;animation:spin .8s linear infinite}
-        @keyframes spin{to{transform:rotate(360deg)}}
-        .result-card{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);padding:32px;max-width:480px;width:100%}
-        .result-card h2{font-size:20px;font-weight:700;margin-bottom:20px;text-align:center}
-        .score-row{display:flex;justify-content:space-between;padding:10px 0;font-size:14px;border-bottom:1px solid var(--border)}
-        .score-row:last-child{border-bottom:none}
-        .score-row .label{color:var(--text-secondary)}.score-row .value{font-weight:600}
-        .score-final{display:flex;justify-content:space-between;padding:14px 0;font-size:16px;font-weight:700;border-top:2px solid var(--primary);margin-top:8px}
-        .verdict{text-align:center;padding:20px;margin-top:16px;border-radius:10px;font-size:18px;font-weight:700}
-        .verdict.pass{background:#dcfce7;color:#166534;border:1px solid #bbf7d0}
-        .verdict.fail{background:#fee2e2;color:#991b1b;border:1px solid #fecaca}
-        .btn-row{display:flex;gap:10px;justify-content:center;margin-top:20px}
-        .redirect-msg{text-align:center;color:var(--text-secondary);font-size:13px;margin-top:12px}
-        @media(max-width:768px){.trial-content{flex-direction:column;padding:6px;gap:6px}.trial-panel{flex:1 1 0;min-height:0}.header{padding:8px 12px}.header-title{font-size:14px}.panel-header{padding:6px 12px}.btn{padding:9px 20px;font-size:14px}.card{padding:24px 16px}}
-    </style>
+<meta charset="UTF-8">
+<title>Hand CAPTCHA 실험</title>
+
+<script src="https://unpkg.com/@mediapipe/hands@0.4/hands.js"></script>
+<script src="https://unpkg.com/@mediapipe/drawing_utils/drawing_utils.js"></script>
+
+<style>
+body{margin:0;background:#111;color:#fff;font-family:sans-serif}
+.container{display:flex;height:100vh}
+.panel{flex:1;position:relative}
+video,canvas{position:absolute;width:100%;height:100%;object-fit:cover}
+.info{position:absolute;top:10px;left:10px;background:rgba(0,0,0,.5);padding:6px 10px;border-radius:6px}
+</style>
 </head>
+
 <body>
-<div class="loading-overlay" id="loadingOverlay"><div class="spinner"></div><p id="loadingText">MediaPipe 모델 로딩 중...</p></div>
 
-<div class="header"><div class="header-icon">H</div><div class="header-title">손 동작 CAPTCHA v2 — 동작 평가</div></div>
-
-<div class="screen active" id="screenStart">
-    <div class="card">
-        <h1>🤚 Hand CAPTCHA v2</h1>
-        <p>가려진 손 동작의 <b>대표 프레임</b>이 순서대로 제시됩니다.<br>각 자세를 맞추면 다음 자세로 넘어가며,<br><b>자세 전환 과정</b>이 기록·평가됩니다.</p>
-        <div class="input-group">
-            <label>참가자 ID (이니셜 등)</label>
-            <input type="text" id="inputPid" placeholder="예: KYJ" maxlength="20">
-        </div>
-        <div class="hand-select-group">
-            <div class="hand-btn" onclick="selectHand('left',this)"><div class="hand-emoji">🤚</div><div class="hand-label">왼손</div></div>
-            <div class="hand-btn" onclick="selectHand('right',this)"><div class="hand-emoji">✋</div><div class="hand-label">오른손</div></div>
-        </div>
-        <button class="btn btn-primary btn-lg" id="btnStart" disabled onclick="startCaptcha()">CAPTCHA 시작</button>
+<div class="container">
+    <div class="panel">
+        <div class="info" id="infoText">로딩중...</div>
+        <video id="refVideo" muted></video>
+        <canvas id="refCanvas"></canvas>
     </div>
-</div>
-
-<div class="trial-container" id="screenTrial">
-    <div class="kf-progress" id="kfProgress"></div>
-    <div class="trial-content">
-        <div class="trial-panel">
-            <div class="panel-header"><span class="panel-title">📌 목표 자세</span><span class="panel-badge" id="kfLabel">준비 중</span></div>
-            <div class="ref-area">
-                <canvas id="refCanvas"></canvas>
-                <video id="refVideo" muted playsinline crossorigin="anonymous" style="display:none"></video>
-                <div class="keyframe-label" id="kfInfo"></div>
-                <div class="match-indicator waiting" id="matchInd">자세를 맞춰주세요</div>
-            </div>
-        </div>
-        <div class="trial-panel">
-            <div class="panel-header"><span class="panel-title">📷 카메라</span><span class="panel-badge" id="frameCounter">0 프레임</span></div>
-            <div class="camera-area"><video id="cameraVideo" playsinline autoplay></video><canvas id="cameraCanvas"></canvas><div class="camera-placeholder" id="cameraPlaceholder">카메라 초기화 중...</div></div>
-            <div class="status-bar waiting" id="statusBar">대표 프레임의 자세를 따라해 주세요</div>
-        </div>
-    </div>
-</div>
-
-<div class="screen" id="screenResult">
-    <div class="result-card">
-        <h2>📊 CAPTCHA 결과</h2>
-        <div class="score-row"><span class="label">전환 구간</span><span class="value" id="resSegments">-</span></div>
-        <div class="score-row"><span class="label">인식 프레임</span><span class="value" id="resDetection">-</span></div>
-        <div class="score-row"><span class="label">DTW-관절 (×0.38)</span><span class="value" id="resDtwAngle">-</span></div>
-        <div class="score-row"><span class="label">Accel (×0.37)</span><span class="value" id="resAccel">-</span></div>
-        <div class="score-row"><span class="label">관절 (×0.25)</span><span class="value" id="resAngle">-</span></div>
-        <div class="score-final"><span>최종 CAPTCHA 점수</span><span id="resFinal">-</span></div>
-        <div class="verdict" id="verdict"></div>
-        <div class="redirect-msg" id="redirectMsg"></div>
-        <div class="btn-row"><button class="btn btn-primary" onclick="location.reload()">다시 시도</button></div>
+    <div class="panel">
+        <video id="cam" autoplay playsinline></video>
+        <canvas id="canvas"></canvas>
     </div>
 </div>
 
 <script>
-const VIDEO_BASE = 'https://mukgore.github.io/handcaptcha/';
-const ACTIONS_L=['l1','l2','l3'], ACTIONS_R=['r1','r2','r3'];
-const MATCH_ANGLE_THRESH=25; 
-const MATCH_HOLD_MS=500;     
-const THRESHOLD=0.25;
-const W2={da:0.38, ac:0.37, a:0.25}; 
-const MX={angle:46.9413, dtw_angle:44.0014, accel:0.1926};
-const AT=[[0,5,6],[5,6,7],[6,7,8],[0,9,10],[9,10,11],[10,11,12],[0,13,14],[13,14,15],[14,15,16],[0,17,18],[17,18,19],[18,19,20],[0,1,2],[1,2,3],[2,3,4]];
-const LN=['WRIST','THUMB_CMC','THUMB_MCP','THUMB_IP','THUMB_TIP','INDEX_MCP','INDEX_PIP','INDEX_DIP','INDEX_TIP','MIDDLE_MCP','MIDDLE_PIP','MIDDLE_DIP','MIDDLE_TIP','RING_MCP','RING_PIP','RING_DIP','RING_TIP','PINKY_MCP','PINKY_PIP','PINKY_DIP','PINKY_TIP'];
-const FORMS_URL='https://forms.gle/ji8KMSwBzbxXzTUv6';
+// ===== 설정 =====
+const VIDEO_BASE = './';
+const ACTIONS = ['l1','l2','l3','r1','r2','r3'];
 
-let selectedHand=null, pid='';
-let hands=null, camStream=null, animId=null, baseData=null;
-let keyframes=[], kfIdx=0, phase='idle'; 
-let matchStart=0, recStart=0, segments=[], curSegFrames=[];
+let mode = Math.random() < 0.5 ? 'A' : 'B';
+let keyframes = [];
+let kfIdx = 0;
+let phase = 'matching';
+let matchStart = 0;
 
-const rv=document.getElementById('refVideo'), rc=document.getElementById('refCanvas'), rctx=rc.getContext('2d');
-const cv=document.getElementById('cameraVideo'), cc=document.getElementById('cameraCanvas'), ctx=cc.getContext('2d');
+// ===== 로그 =====
+let log = {
+    mode,
+    matches: [],
+    timestamps: [],
+    frames: []
+};
 
-async function loadBase(){
-    try{
-        document.getElementById('loadingText').textContent = "기초 데이터 로딩 중...";
-        const r = await fetch(VIDEO_BASE + 'landmarks_base.json');
-        if(!r.ok) throw new Error("JSON Fetch Failed");
-        baseData = await r.json();
-        console.log("Base Data Loaded:", Object.keys(baseData).length);
-    } catch(e) {
-        console.error('Data loading error:', e);
-        alert("데이터를 불러오지 못했습니다. 인터넷 연결을 확인하세요.");
-    }
-}
+// ===== DOM =====
+const rv = document.getElementById('refVideo');
+const rc = document.getElementById('refCanvas');
+const rctx = rc.getContext('2d');
 
-function getBase(action){
-    if(!baseData) return null;
-    const key = action + '_baseline';
-    for(const k of Object.keys(baseData)) {
-        if(k.startsWith(key)){
-            const d = baseData[k];
-            const info = d.video_info || {};
-            const w = info.width || 720, h = info.height || 720;
-            return d.frames.filter(f=>f.detected && f.landmarks_px).map(f=>{
-                const lm = f.landmarks_px;
-                return LN.map(n=>[lm[n].x/w, lm[n].y/h]);
-            });
-        }
-    }
-    return null;
-}
+const cam = document.getElementById('cam');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
 
-function findKeyframes(baseLm){
-    if(!baseLm || baseLm.length < 10) return [0, Math.floor(baseLm.length/2), baseLm.length-1];
-    // 단순화된 고정 지점 (0%, 50%, 100%) 추출
-    return [0, Math.floor(baseLm.length * 0.4), Math.floor(baseLm.length * 0.8), baseLm.length - 1];
-}
-
-function extractVideoFrame(video, canvas, ctx){
-    if(video.videoWidth === 0) return;
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-}
-
+// ===== 시퀀스 생성 =====
 function genSequence(){
-    const acts = selectedHand === 'left' ? ACTIONS_L : ACTIONS_R;
-    const sel = [...acts].sort(()=>Math.random()-0.5).slice(0, 2);
+    const sel = ACTIONS.sort(()=>Math.random()-0.5).slice(0,2);
+
     keyframes = [];
-    for(const action of sel){
-        const baseLm = getBase(action);
-        if(!baseLm) continue;
-        const kfIdxs = findKeyframes(baseLm);
-        const fps = 24;
-        kfIdxs.forEach(fi => {
-            keyframes.push({action, frameIdx:fi, time:fi/fps, baseLm:baseLm[fi], allBaseLm:baseLm});
-        });
-    }
-    const prog = document.getElementById('kfProgress');
-    prog.innerHTML = keyframes.map((_,i) => `<div class="kf-step"><div class="kf-dot" id="kfd${i}">${i+1}</div>${i < keyframes.length-1 ? '<span class="kf-arrow">→</span>' : ''}</div>`).join('');
+    sel.forEach(a=>{
+        keyframes.push({action:a, time:0});
+        keyframes.push({action:a, time:0.5});
+        keyframes.push({action:a, time:1});
+    });
 }
 
-function showKeyframe(idx){
-    if(idx >= keyframes.length) return;
-    const kf = keyframes[idx];
-    document.getElementById('kfLabel').textContent = `자세 ${idx+1}/${keyframes.length}`;
-    document.getElementById('kfInfo').textContent = `${kf.action.toUpperCase()} - 프레임 ${kf.frameIdx}`;
+// ===== 키프레임 표시 =====
+function showKeyframe(){
+    if(kfIdx >= keyframes.length){
+        finish();
+        return;
+    }
 
-    // 리스너 먼저 등록
-    rv.oncanplay = () => { rv.currentTime = kf.time; };
-    rv.onseeked = () => { 
-        extractVideoFrame(rv, rc, rctx); 
-        rv.oncanplay = null; 
-        rv.onseeked = null; 
-    };
+    const kf = keyframes[kfIdx];
+
+    document.getElementById('infoText').innerText =
+        `Mode:${mode} | ${kfIdx+1}/${keyframes.length}`;
 
     rv.src = VIDEO_BASE + kf.action + '_level3_DIP.mp4';
-    rv.load();
 
-    document.querySelectorAll('.kf-dot').forEach((dot, i) => {
-        dot.className = 'kf-dot' + (i < idx ? ' done' : i === idx ? ' active' : '');
-    });
+    rv.onloadedmetadata = ()=>{
+        rv.currentTime = kf.time;
 
-    phase = 'matching';
-    matchStart = 0;
-    updateMatchIndicator('waiting', '자세를 맞춰주세요');
+        if(mode === 'A'){
+            rv.pause();
+        } else {
+            rv.pause();
+            drawFrame();
+        }
+    };
 }
 
-// (나머지 Mediapipe, Recording 로직 등은 기존 코드와 유사하되 버그 수정됨)
-// ... [중략: 핵심 송출 로직은 위와 같음] ...
+// ===== 프레임 그리기 =====
+function drawFrame(){
+    rc.width = rv.videoWidth;
+    rc.height = rv.videoHeight;
+    rctx.drawImage(rv,0,0);
+}
 
-async function startCaptcha(){
-    pid = document.getElementById('inputPid').value.trim();
-    if(!pid) return;
-    
-    showScr('screenTrial');
-    await loadBase(); // 데이터 로딩 대기
-    
-    if(!baseData) {
-        alert("데이터 로딩 실패");
-        location.reload();
+// ===== 다음 =====
+function next(){
+    log.matches.push(kfIdx);
+    log.timestamps.push(performance.now());
+
+    if(mode === 'A'){
+        playSegment();
+    } else {
+        kfIdx++;
+        showKeyframe();
+    }
+}
+
+// ===== 방안 A =====
+function playSegment(){
+    phase = 'playing';
+
+    const nextKF = keyframes[kfIdx+1];
+    if(!nextKF){
+        finish();
         return;
     }
-    
-    genSequence();
-    if(keyframes.length === 0) {
-        alert("시퀀스 생성 실패");
-        location.reload();
-        return;
-    }
-    
-    await initCam();
-    kfIdx = 0;
-    showKeyframe(0);
+
+    rv.currentTime = keyframes[kfIdx].time;
+    rv.play();
+
+    const stopTime = nextKF.time;
+
+    const loop = ()=>{
+        if(rv.currentTime >= stopTime){
+            rv.pause();
+            kfIdx++;
+            phase = 'matching';
+            showKeyframe();
+        } else requestAnimationFrame(loop);
+    };
+    loop();
 }
 
-// ... (onRes, initMP 등 기존 함수들 포함됨) ...
-// (전체 실행을 위해 아래 함수들을 기존 코드에서 가져와 붙여넣으세요)
-function updateMatchIndicator(cls, text){
-    const mi=document.getElementById('matchInd');
-    mi.className='match-indicator '+cls;
-    mi.textContent=text;
-}
-function setS(t,h){const s=document.getElementById('statusBar');s.className='status-bar '+t;s.innerHTML=h;}
-function selectHand(h,b){selectedHand=h;document.querySelectorAll('.hand-btn').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');checkReady();}
-function checkReady(){document.getElementById('btnStart').disabled=!(selectedHand && document.getElementById('inputPid').value.trim());}
-document.getElementById('inputPid').addEventListener('input', checkReady);
-function showScr(id){document.querySelectorAll('.screen,.trial-container').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active');}
+// ===== 종료 =====
+function finish(){
+    phase = 'done';
 
-async function initMP(){
-    hands=new Hands({locateFile:f=>`https://unpkg.com/@mediapipe/hands@0.4.1675469240/${f}`});
-    hands.setOptions({maxNumHands:1, modelComplexity:1, minDetectionConfidence:0.5, minTrackingConfidence:0.5});
-    hands.onResults(onRes);
-    await hands.initialize();
-    document.getElementById('loadingOverlay').classList.add('hidden');
+    const dataStr = JSON.stringify(log, null, 2);
+    const blob = new Blob([dataStr], {type: "application/json"});
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `result_${Date.now()}.json`;
+    a.click();
+
+    console.log(log);
+    alert("실험 완료 (JSON 저장됨)");
 }
 
-async function initCam(){
-    try{
-        camStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:640},height:{ideal:480}}});
-        cv.srcObject=camStream; await cv.play();
-        cc.width=cv.videoWidth||640; cc.height=cv.videoHeight||480;
-        document.getElementById('cameraPlaceholder').style.display='none'; cc.style.display='block';
-        (async function loop(){if(cv.readyState>=2) await hands.send({image:cv}); animId=requestAnimationFrame(loop);})();
-    }catch(e){document.getElementById('cameraPlaceholder').textContent='카메라 접근이 거부되었습니다.';}
-}
+// ===== MediaPipe =====
+const hands = new Hands({
+    locateFile: f=>`https://unpkg.com/@mediapipe/hands@0.4/${f}`
+});
 
-// angleErr, ang, ppSingle 등 생략된 연산 함수들도 그대로 유지하세요.
-function ang(p1,j,p2){
-    const v1=[p1[0]-j[0],p1[1]-j[1]], v2=[p2[0]-j[0],p2[1]-j[1]];
-    const dot=v1[0]*v2[0]+v1[1]*v2[1], m1=Math.sqrt(v1[0]*v1[0]+v1[1]*v1[1])+1e-8, m2=Math.sqrt(v2[0]*v2[0]+v2[1]*v2[1])+1e-8;
-    return Math.acos(Math.max(-1,Math.min(1,dot/(m1*m2))))*180/Math.PI;
-}
-function ppSingle(lm){
-    const w=lm[0], n=lm.map(p=>[p[0]-w[0],p[1]-w[1]]);
-    const dx=n[9][0],dy=n[9][1],h=Math.max(Math.sqrt(dx*dx+dy*dy),1e-6);
-    return n.map(p=>[p[0]/h,p[1]/h]);
-}
-function angleErr(userLm, targetLm){
-    let tot=0, c=0;
-    for(const [p,j,d] of AT){
-        const uA=ang(userLm[p], userLm[j], userLm[d]);
-        const tA=ang(targetLm[p], targetLm[j], targetLm[d]);
-        tot+=Math.abs(uA-tA); c++;
-    }
-    return tot/c;
-}
+hands.setOptions({
+    maxNumHands:1,
+    minDetectionConfidence:0.5,
+    minTrackingConfidence:0.5
+});
 
-function onRes(r){
-    ctx.save(); ctx.clearRect(0,0,cc.width,cc.height); ctx.translate(cc.width,0); ctx.scale(-1,1);
-    ctx.drawImage(r.image,0,0,cc.width,cc.height); ctx.restore();
-    const has=r.multiHandLandmarks&&r.multiHandLandmarks.length>0;
-    if(has){
-        const lm=r.multiHandLandmarks[0];
-        drawConnectors(ctx, lm.map(l=>({x:1-l.x,y:l.y,z:l.z})), HAND_CONNECTIONS, {color:'#00FF88',lineWidth:2});
-        drawLandmarks(ctx, lm.map(l=>({x:1-l.x,y:l.y,z:l.z})), {color:'#FF4444',lineWidth:1,radius:3});
-        const userLm=lm.map(l=>[l.x, l.y]);
+hands.onResults(res=>{
+    ctx.clearRect(0,0,canvas.width,canvas.height);
 
-        if(phase==='matching' && kfIdx<keyframes.length){
-            const target=keyframes[kfIdx].baseLm;
-            const uPP=ppSingle(userLm), tPP=ppSingle(target);
-            const err=angleErr(uPP, tPP);
-            if(err<MATCH_ANGLE_THRESH){
-                if(matchStart===0) matchStart=performance.now();
-                const held=performance.now()-matchStart;
-                updateMatchIndicator('matched',`맞춤 중... ${Math.min(100,Math.round(held/MATCH_HOLD_MS*100))}%`);
-                if(held>=MATCH_HOLD_MS){
-                    if(kfIdx === 0) startTransitionRecording();
-                    else onTransitionMatched();
-                }
-            } else {
-                matchStart=0;
-                updateMatchIndicator('waiting',`자세를 맞춰주세요 (오차: ${err.toFixed(0)}°)`);
+    if(res.multiHandLandmarks){
+        const lm = res.multiHandLandmarks[0];
+
+        drawConnectors(ctx, lm, HAND_CONNECTIONS);
+        drawLandmarks(ctx, lm);
+
+        // 🔴 랜드마크 저장
+        log.frames.push({
+            t: performance.now(),
+            kfIndex: kfIdx,
+            phase: phase,
+            landmarks: lm.map(p => [p.x, p.y, p.z])
+        });
+
+        if(phase === 'matching'){
+            if(matchStart === 0) matchStart = performance.now();
+
+            const held = performance.now() - matchStart;
+
+            if(held > 500){
+                matchStart = 0;
+                next();
             }
         }
-        // Recording 로직 생략 (기본 로직 유지)
     }
+});
+
+// ===== 카메라 =====
+async function initCam(){
+    const stream = await navigator.mediaDevices.getUserMedia({video:true});
+    cam.srcObject = stream;
+
+    canvas.width = 640;
+    canvas.height = 480;
+
+    async function loop(){
+        await hands.send({image:cam});
+        requestAnimationFrame(loop);
+    }
+    loop();
 }
-// ... [나머지 compute 함수 등 생략] ...
-initMP().catch(e=>console.error(e));
+
+// ===== 실행 =====
+genSequence();
+showKeyframe();
+initCam();
+
 </script>
 </body>
 </html>
