@@ -450,11 +450,25 @@ async function initCam(){
 }
 
 function onRes(r) {
-    // 1. 카메라 화면 거울 모드 출력 (좌우 반전)
     ctx.save();
     ctx.clearRect(0, 0, cc.width, cc.height);
-    ctx.translate(cc.width, 0);
-    ctx.scale(-1, 1);
+
+    // 1. 현재 사용 중인 카메라가 전면(user)인지 확인
+    // 후면 카메라일 경우 보통 'environment'로 설정됩니다.
+    const videoTrack = camStream ? camStream.getVideoTracks()[0] : null;
+    const settings = videoTrack ? videoTrack.getSettings() : {};
+    // facingMode 정보가 없으면 label을 통해 front/back 여부를 추측합니다.
+    const isFrontCamera = settings.facingMode === 'user' || 
+                          (videoTrack && videoTrack.label.toLowerCase().includes('front')) ||
+                          (!settings.facingMode && !videoTrack.label.toLowerCase().includes('back'));
+
+    // 2. 전면 카메라(셀카)일 때만 좌우 반전(거울모드) 적용
+    // 후면 카메라는 이미 정방향이므로 뒤집지 않습니다.
+    if (isFrontCamera) {
+        ctx.translate(cc.width, 0);
+        ctx.scale(-1, 1);
+    }
+
     ctx.drawImage(r.image, 0, 0, cc.width, cc.height);
     ctx.restore();
 
@@ -470,18 +484,18 @@ function onRes(r) {
     const lm = r.multiHandLandmarks[0];
     lastLm = lm;
 
-    // 2. 화면 위에 그려지는 관절 포인트(Landmarks) 거울 모드 적용
-    // lm.map(l => ({ x: 1 - l.x, ... }))를 통해 뒤집힌 화면 위치에 정확히 점을 찍습니다.
-    drawConnectors(ctx, lm.map(l => ({ x: 1 - l.x, y: l.y, z: l.z })), HAND_CONNECTIONS, { color: '#00FF88', lineWidth: 2 });
-    drawLandmarks(ctx, lm.map(l => ({ x: 1 - l.x, y: l.y, z: l.z })), { color: '#FF4444', lineWidth: 1, radius: 3 });
+    // 3. 시각화 및 데이터 좌표 계산 (카메라 모드에 따라 x축 반전 여부 결정)
+    // 전면이면 거울처럼 보이게 1-x, 후면이면 정방향 그대로 x 사용
+    const getOrientedX = (val) => isFrontCamera ? 1 - val : val;
 
-    // 3. 저장용 좌표 데이터 거울 모드 적용 (핵심 수정 사항)
-    // 분석 시에도 화면과 똑같은 방향으로 인식되도록 x값을 1-x로 변환하여 저장합니다.
-    const userLm = lm.map(l => [1 - l.x, l.y]);
+    // 화면 위 관절 포인트 그리기
+    drawConnectors(ctx, lm.map(l => ({ x: getOrientedX(l.x), y: l.y, z: l.z })), HAND_CONNECTIONS, { color: '#00FF88', lineWidth: 2 });
+    drawLandmarks(ctx, lm.map(l => ({ x: getOrientedX(l.x), y: l.y, z: l.z })), { color: '#FF4444', lineWidth: 1, radius: 3 });
 
-    // --- 이후 로직은 거울 모드 좌표(userLm)를 기준으로 작동합니다 ---
+    // 4. 저장 및 판정용 좌표 (화면 방향과 100% 일치됨)
+    const userLm = lm.map(l => [getOrientedX(l.x), l.y]);
 
-    // 자세 매칭 단계 (처음 자세 잡기)
+    // 자세 매칭 로직 (userLm 기준)
     if (phase === 'matching' && kfIdx < keyframes.length && targetLm) {
         const uPP = ppSingle(userLm), tPP = ppSingle(targetLm);
         const err = angleErr(uPP, tPP);
@@ -493,9 +507,8 @@ function onRes(r) {
         }
     }
 
-    // 실험 기록 단계 (동작 수행 중)
+    // 실험 기록 로직
     if (phase === 'recording') {
-        // 뒤집힌 좌표(userLm)가 저장됩니다.
         curSegFrames.push({ t: performance.now() - recStart, lm: userLm });
         document.getElementById('frameCounter').textContent = curSegFrames.length + ' 프레임';
 
