@@ -106,7 +106,7 @@
             <div class="panel-header"><span class="panel-title">📌 목표 자세</span><span class="panel-badge" id="kfLabel">준비 중</span></div>
             <div class="ref-area">
                 <canvas id="refCanvas"></canvas>
-                <video id="refVideo" muted playsinline></video>
+                <video id="refVideo" muted playsinline crossorigin="anonymous"></video>
                 <div class="keyframe-label" id="kfInfo"></div>
                 <div class="match-indicator waiting" id="matchInd">자세를 맞춰주세요</div>
             </div>
@@ -172,7 +172,6 @@ function getBase(action){
 
 // ===== KEYFRAME DETECTION =====
 function findKeyframes(baseLm){
-    // Find frames where velocity is minimal (pose transition boundaries)
     if(!baseLm || baseLm.length<10) return [0, Math.floor(baseLm.length/2), baseLm.length-1];
     const vel=[];
     for(let i=1;i<baseLm.length;i++){
@@ -183,36 +182,34 @@ function findKeyframes(baseLm){
         }
         vel.push(s/21);
     }
-    // Smooth velocity
     const w=5, sm=[];
     for(let i=0;i<vel.length;i++){
         let s=0,c=0;
         for(let j=Math.max(0,i-w);j<=Math.min(vel.length-1,i+w);j++){s+=vel[j];c++;}
         sm.push(s/c);
     }
-    // Find local minima (still points)
-    const mins=[0]; // always include first frame
+    const mins=[0];
     for(let i=5;i<sm.length-5;i++){
         if(sm[i]<sm[i-1] && sm[i]<sm[i+1] && sm[i]<0.005){
             if(mins.length===0 || i-mins[mins.length-1]>15) mins.push(i);
         }
     }
-    mins.push(baseLm.length-1); // always include last frame
-    // Pick 3-4 evenly spaced keyframes
+    mins.push(baseLm.length-1);
     if(mins.length<=4) return mins;
     const step=Math.floor(mins.length/3);
     return [mins[0], mins[step], mins[step*2], mins[mins.length-1]];
 }
 
+// 비디오 너비가 0일 때의 대응 추가
 function extractVideoFrame(video, canvas, ctx){
-    canvas.width=video.videoWidth||720;
-    canvas.height=video.videoHeight||720;
+    if (video.videoWidth === 0) return;
+    canvas.width=video.videoWidth;
+    canvas.height=video.videoHeight;
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 }
 
 // ===== POSE MATCHING =====
 function angleErr(userLm, targetLm){
-    // Mean absolute angle error across all joint triplets
     let tot=0, c=0;
     for(const [p,j,d] of AT){
         const uA=ang(userLm[p], userLm[j], userLm[d]);
@@ -235,20 +232,17 @@ function ppSingle(lm){
 // ===== GENERATE CAPTCHA SEQUENCE =====
 function genSequence(){
     const acts=selectedHand==='left'?ACTIONS_L:ACTIONS_R;
-    // Pick 2 random actions
     const sel=[...acts].sort(()=>Math.random()-0.5).slice(0,2);
     keyframes=[];
     for(const action of sel){
         const baseLm=getBase(action);
         if(!baseLm) continue;
         const kfIdxs=findKeyframes(baseLm);
-        // Get video FPS info
         const fps=24;
         for(const fi of kfIdxs){
             keyframes.push({action, frameIdx:fi, time:fi/fps, baseLm:baseLm[fi], allBaseLm:baseLm});
         }
     }
-    // Build progress UI
     const prog=document.getElementById('kfProgress');
     prog.innerHTML=keyframes.map((_,i)=>{
         const arrow=i<keyframes.length-1?'<span class="kf-arrow">→</span>':'';
@@ -261,9 +255,8 @@ function showKeyframe(idx){
     const kf=keyframes[idx];
     document.getElementById('kfLabel').textContent=`자세 ${idx+1}/${keyframes.length}`;
     document.getElementById('kfInfo').textContent=`${kf.action.toUpperCase()} — 프레임 ${kf.frameIdx}`;
-    // Load video and seek to keyframe time
-    rv.src=VIDEO_BASE+kf.action+'_level3_DIP.mp4';
-    rv.load();
+    
+    // 리스너를 먼저 등록하고 src를 지정하도록 수정
     rv.oncanplay=()=>{
         rv.currentTime=kf.time;
     };
@@ -271,7 +264,10 @@ function showKeyframe(idx){
         extractVideoFrame(rv, rc, rctx);
         rv.oncanplay=null; rv.onseeked=null;
     };
-    // Update progress dots
+
+    rv.src=VIDEO_BASE+kf.action+'_level3_DIP.mp4';
+    rv.load();
+
     for(let i=0;i<keyframes.length;i++){
         const dot=document.getElementById('kfd'+i);
         dot.className='kf-dot'+(i<idx?' done':i===idx?' active':'');
@@ -297,14 +293,17 @@ function startTransitionRecording(){
     dot.className='kf-dot rec';
     updateMatchIndicator('recording','전환 기록 중...');
     setS('recording','다음 자세로 전환해 주세요');
-    // Show next keyframe
     kfIdx++;
     if(kfIdx<keyframes.length){
         const kf=keyframes[kfIdx];
-        rv.src=VIDEO_BASE+kf.action+'_level3_DIP.mp4';
-        rv.load();
+        
+        // 다음 키프레임 전환 시에도 리스너 등록 순서 최적화
         rv.oncanplay=()=>{rv.currentTime=kf.time;};
         rv.onseeked=()=>{extractVideoFrame(rv,rc,rctx);rv.oncanplay=null;rv.onseeked=null;};
+        
+        rv.src=VIDEO_BASE+kf.action+'_level3_DIP.mp4';
+        rv.load();
+
         document.getElementById('kfLabel').textContent=`자세 ${kfIdx+1}/${keyframes.length}`;
         document.getElementById('kfInfo').textContent=`${kf.action.toUpperCase()} — 프레임 ${kf.frameIdx}`;
         for(let i=0;i<keyframes.length;i++){
@@ -315,7 +314,6 @@ function startTransitionRecording(){
 }
 
 function onTransitionMatched(){
-    // Save segment
     segments.push({
         fromKf:kfIdx-1, toKf:kfIdx,
         fromAction:keyframes[kfIdx-1].action, toAction:keyframes[kfIdx].action,
@@ -326,7 +324,6 @@ function onTransitionMatched(){
     dot.className='kf-dot done';
 
     if(kfIdx>=keyframes.length-1){
-        // All done
         const dot2=document.getElementById('kfd'+kfIdx);
         dot2.className='kf-dot done';
         phase='done';
@@ -334,7 +331,6 @@ function onTransitionMatched(){
         setS('complete','✅ 모든 동작이 완료되었습니다!');
         setTimeout(()=>compute(), 500);
     } else {
-        // Next transition
         phase='matching';
         matchStart=0;
         updateMatchIndicator('waiting','자세를 맞춰주세요');
@@ -380,14 +376,11 @@ function onRes(r){
                 const held=performance.now()-matchStart;
                 updateMatchIndicator('matched',`맞춤 중... ${Math.min(100,Math.round(held/MATCH_HOLD_MS*100))}%`);
                 if(held>=MATCH_HOLD_MS){
-                    // Matched!
                     if(kfIdx===0){
-                        // First keyframe matched — start recording to next
                         const dot=document.getElementById('kfd0');
                         dot.className='kf-dot done';
                         startTransitionRecording();
                     } else {
-                        // Transition target matched
                         onTransitionMatched();
                     }
                 }
@@ -400,7 +393,6 @@ function onRes(r){
         if(phase==='recording'){
             curSegFrames.push({t:performance.now()-recStart, lm:userLm});
             document.getElementById('frameCounter').textContent=curSegFrames.length+' 프레임';
-            // Check if user matched next keyframe
             if(kfIdx<keyframes.length){
                 const target=keyframes[kfIdx].baseLm;
                 const uPP=ppSingle(userLm), tPP=ppSingle(target);
@@ -448,20 +440,16 @@ function mAc(t,b){const tr=rs(t,b.length);if(!tr||b.length<5)return null;functio
 function es(raw,mx,dr,hi=false){if(raw===null)return 0;const n=mx>0?raw/mx:0;return Math.max(0,Math.min(1, hi?dr*Math.min(1,n):dr*Math.max(0,1-n)));}
 
 function compute(){
-    // Aggregate all segment frames and corresponding base frames
     let allUserLm=[], allBaseLm=[];
     const totalSegments=segments.length;
-
     for(const seg of segments){
         const det=seg.frames.filter(f=>f.lm!==null).map(f=>f.lm);
         if(det.length<3) continue;
-        // Get base landmarks between the two keyframes
         const fromKf=keyframes[seg.fromKf], toKf=keyframes[seg.toKf];
         let baseSeg;
         if(fromKf.action===toKf.action){
             baseSeg=fromKf.allBaseLm.slice(fromKf.frameIdx, toKf.frameIdx+1);
         } else {
-            // Cross-action: concatenate end of first + start of second
             const a=fromKf.allBaseLm.slice(fromKf.frameIdx);
             const b=toKf.allBaseLm.slice(0, toKf.frameIdx+1);
             baseSeg=[...a,...b];
@@ -469,23 +457,19 @@ function compute(){
         allUserLm.push(...det);
         allBaseLm.push(...baseSeg);
     }
-
     const tF=segments.reduce((s,seg)=>s+seg.frames.length, 0);
     const dC=allUserLm.length;
     const dR=tF>0?dC/tF:0;
-
     const bPP=pp(allBaseLm), tPP=pp(allUserLm);
     let rA=null, rDA=null, rAc=null;
     if(tPP&&bPP&&tPP.length>=3){
         rA=mA(tPP,bPP); rDA=mDA(tPP,bPP); rAc=mAc(tPP,bPP);
     }
-
     const sA=es(rA,MX.angle,dR);
     const sDA=es(rDA,MX.dtw_angle,dR);
     const sAc=es(rAc,MX.accel,dR);
     const fin=sDA*W2.da + sAc*W2.ac + sA*W2.a;
 
-    // Display
     document.getElementById('resSegments').textContent=`${totalSegments}개 전환 구간`;
     document.getElementById('resDetection').textContent=`${dC}/${tF} (${(dR*100).toFixed(0)}%)`;
     document.getElementById('resDtwAngle').textContent=sDA.toFixed(3);
@@ -499,7 +483,6 @@ function compute(){
     if(animId) cancelAnimationFrame(animId);
     if(camStream) camStream.getTracks().forEach(t=>t.stop());
 
-    // Build result data
     const result={
         experimentInfo:{participantId:pid, selectedHand, timestamp:Date.now(), version:'v2_motion_eval'},
         keyframes:keyframes.map(kf=>({action:kf.action, frameIdx:kf.frameIdx})),
@@ -520,7 +503,6 @@ function compute(){
         }
     };
 
-    // Auto-download JSON
     const blob=new Blob([JSON.stringify(result,null,2)], {type:'application/json'});
     const url=URL.createObjectURL(blob);
     const a=document.createElement('a');
@@ -529,7 +511,6 @@ function compute(){
     a.click();
     URL.revokeObjectURL(url);
 
-    // Redirect to Google Forms after 5 seconds
     showScr('screenResult');
     let countdown=5;
     const msg=document.getElementById('redirectMsg');
