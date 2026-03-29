@@ -144,8 +144,9 @@ function playSegment(){
 
 // ===== 종료 =====
 function finish(){
-    phase = 'done';
+    phase='done';
 
+    // 1. JSON 저장
     const dataStr = JSON.stringify(log, null, 2);
     const blob = new Blob([dataStr], {type: "application/json"});
     const url = URL.createObjectURL(blob);
@@ -156,7 +157,40 @@ function finish(){
     a.click();
 
     console.log(log);
-    alert("실험 완료 (JSON 저장됨)");
+
+    // 2. 화면 교체 + 설문 버튼 제공
+    document.body.innerHTML = `
+        <div style="
+            display:flex;
+            flex-direction:column;
+            align-items:center;
+            justify-content:center;
+            height:100vh;
+            background:#111;
+            color:#fff;
+            font-family:sans-serif;
+            text-align:center;
+        ">
+            <h2>실험 완료</h2>
+            <p style="margin-top:10px;">
+                데이터가 저장되었습니다.<br>
+                아래 버튼을 눌러 설문에 응답해주세요.
+            </p>
+
+            <a href="https://forms.gle/ji8KMSwBzbxXzTUv6" target="_blank"
+               style="
+                   margin-top:20px;
+                   padding:14px 28px;
+                   background:#2563eb;
+                   color:#fff;
+                   border-radius:10px;
+                   text-decoration:none;
+                   font-weight:600;
+               ">
+               SUS 설문 참여
+            </a>
+        </div>
+    `;
 }
 
 // ===== MediaPipe =====
