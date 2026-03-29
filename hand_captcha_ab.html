@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>손 동작 CAPTCHA — A/B 비교 실험</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@mediapipe/hands@0.4.1675469240/hands.js" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/@mediapipe/drawing_utils@0.3.1675466124/drawing_utils.js" crossorigin="anonymous"></script>
+    <style>
+        *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+        :root{--bg:#f8f9fb;--surface:#fff;--primary:#2563eb;--primary-hover:#1d4ed8;--danger:#dc2626;--success:#16a34a;--text:#1e293b;--text-secondary:#64748b;--border:#e2e8f0;--radius:12px;--shadow:0 1px 3px rgba(0,0,0,.08),0 4px 12px rgba(0,0,0,.04);--accent:#f59e0b}
+        body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text);height:100dvh;overflow:hidden;display:flex;flex-direction:column}
+        .header{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100}
+        .header-icon{width:32px;height:32px;background:var(--primary);border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:16px;font-weight:700}
+        .header-title{font-weight:700;font-size:16px}
+        .mode-badge{font-size:12px;padding:3px 10px;border-radius:20px;font-weight:600;margin-left:auto}
+        .mode-badge.modeA{background:#dbeafe;color:#1e40af}
+        .mode-badge.modeB{background:#fef3c7;color:#92400e}
+        .screen{display:none;flex:1;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;overflow-y:auto;min-height:0}
+        .screen.active{display:flex}
+        .card{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);padding:40px;max-width:560px;width:100%;text-align:center}
+        .card h1{font-size:24px;font-weight:700;margin-bottom:8px}
+        .card p{font-size:15px;color:var(--text-secondary);line-height:1.7;margin-bottom:16px}
+        .btn{display:inline-flex;align-items:center;justify-content:center;padding:12px 32px;border-radius:10px;font-family:inherit;font-size:15px;font-weight:600;border:none;cursor:pointer;transition:all .15s;gap:8px}
+        .btn:active{transform:scale(.97)}.btn-primary{background:var(--primary);color:#fff}.btn-primary:hover{background:var(--primary-hover)}.btn:disabled{opacity:.5;cursor:not-allowed;transform:none}.btn-lg{padding:14px 40px;font-size:16px}
+        .hand-select-group{display:flex;gap:16px;justify-content:center;margin:24px 0}
+        .hand-btn{flex:1;max-width:180px;padding:24px 16px;border-radius:var(--radius);border:2px solid var(--border);background:var(--surface);cursor:pointer;transition:all .15s;text-align:center}
+        .hand-btn:hover{border-color:var(--primary)}.hand-btn.selected{border-color:var(--primary);background:#eff6ff}
+        .hand-btn .hand-emoji{font-size:40px;margin-bottom:8px}.hand-btn .hand-label{font-weight:600;font-size:15px}
+        .input-group{margin:16px auto;max-width:300px;text-align:left}
+        .input-group label{font-size:13px;color:var(--text-secondary);display:block;margin-bottom:4px;font-weight:500}
+        .input-group input{width:100%;padding:10px 14px;border:2px solid var(--border);border-radius:8px;font-size:15px;font-family:inherit;transition:border .15s}
+        .input-group input:focus{outline:none;border-color:var(--primary)}
+        .trial-container{display:none;flex:1;flex-direction:column;width:100%;min-height:0;overflow:hidden}
+        .trial-container.active{display:flex}
+        .trial-content{display:flex;flex:1;gap:16px;padding:16px;overflow:hidden}
+        .trial-panel{flex:1;display:flex;flex-direction:column;background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;min-height:0}
+        .panel-header{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+        .panel-title{font-weight:600;font-size:14px}
+        .panel-badge{font-size:12px;padding:3px 10px;background:#f1f5f9;border-radius:20px;color:var(--text-secondary);font-weight:500}
+        .ref-area{flex:1;display:flex;align-items:center;justify-content:center;background:#0f172a;position:relative;min-height:0}
+        .ref-area canvas{width:100%;height:100%;object-fit:contain}
+        .ref-area video{width:100%;height:100%;object-fit:contain;display:none}
+        .keyframe-label{position:absolute;top:12px;left:12px;background:rgba(0,0,0,.7);color:#fff;font-size:12px;padding:4px 10px;border-radius:6px;font-weight:500;z-index:5}
+        .match-indicator{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);padding:6px 16px;border-radius:20px;font-size:13px;font-weight:600;z-index:5;transition:all .2s}
+        .match-indicator.waiting{background:rgba(245,158,11,.9);color:#fff}
+        .match-indicator.matched{background:rgba(22,163,74,.9);color:#fff}
+        .match-indicator.recording{background:rgba(220,38,38,.9);color:#fff;animation:pulse 1s infinite}
+        .match-indicator.playing{background:rgba(37,99,235,.9);color:#fff}
+        @keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
+        .camera-area{flex:1;display:flex;align-items:center;justify-content:center;background:#0f172a;position:relative;min-height:0}
+        .camera-area canvas{width:100%;height:100%;object-fit:contain}
+        .camera-area video{display:none}
+        .camera-placeholder{color:#94a3b8;text-align:center;font-size:14px;padding:24px}
+        .kf-progress{display:flex;gap:8px;justify-content:center;padding:10px;flex-shrink:0}
+        .kf-step{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text-secondary)}
+        .kf-dot{width:28px;height:28px;border-radius:50%;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;transition:all .3s}
+        .kf-dot.active{border-color:var(--accent);background:#fef3c7;color:#92400e}
+        .kf-dot.done{border-color:var(--success);background:#dcfce7;color:#166534}
+        .kf-dot.rec{border-color:var(--danger);background:#fee2e2;color:#991b1b;animation:pulse 1s infinite}
+        .kf-arrow{color:var(--border);font-size:16px}
+        .status-bar{padding:8px 16px;text-align:center;font-size:13px;font-weight:500;flex-shrink:0}
+        .status-bar.waiting{background:#fef3c7;color:#92400e}
+        .status-bar.recording{background:#fee2e2;color:#991b1b}
+        .status-bar.playing{background:#dbeafe;color:#1e40af}
+        .status-bar.complete{background:#dcfce7;color:#166534;font-weight:700}
+        .loading-overlay{position:fixed;inset:0;background:rgba(255,255,255,.9);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:1000;gap:16px}
+        .loading-overlay.hidden{display:none}
+        .spinner{width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--primary);border-radius:50%;animation:spin .8s linear infinite}
+        @keyframes spin{to{transform:rotate(360deg)}}
+        .result-card{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);padding:32px;max-width:520px;width:100%}
+        .result-card h2{font-size:20px;font-weight:700;margin-bottom:20px;text-align:center}
+        .compare-row{display:grid;grid-template-columns:1fr 1fr 1fr;padding:10px 0;font-size:14px;border-bottom:1px solid var(--border);text-align:center}
+        .compare-row.header-row{font-weight:700;background:#f8fafc;padding:12px 0}
+        .compare-row .label{text-align:left;color:var(--text-secondary);padding-left:8px}
+        .verdict{text-align:center;padding:20px;margin-top:16px;border-radius:10px;font-size:16px;font-weight:700}
+        .verdict.pass{background:#dcfce7;color:#166534;border:1px solid #bbf7d0}
+        .btn-row{display:flex;gap:10px;justify-content:center;margin-top:20px}
+        .redirect-msg{text-align:center;color:var(--text-secondary);font-size:13px;margin-top:12px}
+        .inter-card{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);padding:40px;max-width:500px;width:100%;text-align:center}
+        .inter-card h2{font-size:22px;margin-bottom:12px}
+        .inter-card p{color:var(--text-secondary);line-height:1.7;margin-bottom:20px}
+        @media(max-width:768px){.trial-content{flex-direction:column;padding:6px;gap:6px}.trial-panel{flex:1 1 0;min-height:0}.header{padding:8px 12px}.header-title{font-size:14px}.panel-header{padding:6px 12px}.btn{padding:9px 20px;font-size:14px}.card{padding:24px 16px}}
+    </style>
+</head>
+<body>
+<div class="loading-overlay" id="loadingOverlay"><div class="spinner"></div><p style="font-size:14px;color:var(--text-secondary)">MediaPipe 모델 로딩 중...</p></div>
+<div class="header">
+    <div class="header-icon">H</div>
+    <div class="header-title">손 동작 CAPTCHA — A/B 비교 실험</div>
+    <div class="mode-badge" id="modeBadge" style="display:none"></div>
+</div>
+
+<!-- 시작 화면 -->
+<div class="screen active" id="screenStart">
+    <div class="card">
+        <h1>🤚 CAPTCHA 비교 실험</h1>
+        <p>두 가지 방식의 CAPTCHA를 순서대로 체험합니다.<br>
+        <b>방안 A</b>: 영상이 재생되며 다음 자세로 안내<br>
+        <b>방안 B</b>: 대표 프레임만 표시 (영상 없음)<br>
+        순서는 무작위로 결정됩니다.</p>
+        <div class="input-group">
+            <label>참가자 ID (이니셜 등)</label>
+            <input type="text" id="inputPid" placeholder="예: KYJ" maxlength="20">
+        </div>
+        <div class="hand-select-group">
+            <div class="hand-btn" onclick="selectHand('left',this)"><div class="hand-emoji">🤚</div><div class="hand-label">왼손</div></div>
+            <div class="hand-btn" onclick="selectHand('right',this)"><div class="hand-emoji">✋</div><div class="hand-label">오른손</div></div>
+        </div>
+        <button class="btn btn-primary btn-lg" id="btnStart" disabled onclick="startExperiment()">실험 시작</button>
+    </div>
+</div>
+
+<!-- 중간 안내 화면 (1차 → 2차 전환) -->
+<div class="screen" id="screenInter">
+    <div class="inter-card">
+        <h2 id="interTitle"></h2>
+        <p id="interDesc"></p>
+        <button class="btn btn-primary btn-lg" onclick="startNextTrial()">다음 실험 시작</button>
+    </div>
+</div>
+
+<!-- 실험 화면 -->
+<div class="trial-container" id="screenTrial">
+    <div class="kf-progress" id="kfProgress"></div>
+    <div class="trial-content">
+        <div class="trial-panel">
+            <div class="panel-header"><span class="panel-title">📌 목표 자세</span><span class="panel-badge" id="kfLabel">준비 중</span></div>
+            <div class="ref-area">
+                <canvas id="refCanvas"></canvas>
+                <video id="refVideo" muted playsinline></video>
+                <div class="keyframe-label" id="kfInfo"></div>
+                <div class="match-indicator waiting" id="matchInd">자세를 맞춰주세요</div>
+            </div>
+        </div>
+        <div class="trial-panel">
+            <div class="panel-header"><span class="panel-title">📷 카메라</span><span class="panel-badge" id="frameCounter">0 프레임</span></div>
+            <div class="camera-area"><video id="cameraVideo" playsinline autoplay></video><canvas id="cameraCanvas"></canvas><div class="camera-placeholder" id="cameraPlaceholder">카메라 초기화 중...</div></div>
+            <div class="status-bar waiting" id="statusBar">목표 자세를 따라해 주세요</div>
+        </div>
+    </div>
+</div>
+
+<!-- 결과 화면 -->
+<div class="screen" id="screenResult">
+    <div class="result-card">
+        <h2>📊 A/B 비교 결과</h2>
+        <div class="compare-row header-row"><span class="label">지표</span><span>방안 A (영상)</span><span>방안 B (프레임)</span></div>
+        <div class="compare-row"><span class="label">전환 구간</span><span id="rSegA">-</span><span id="rSegB">-</span></div>
+        <div class="compare-row"><span class="label">인식률</span><span id="rDetA">-</span><span id="rDetB">-</span></div>
+        <div class="compare-row"><span class="label">DTW-관절</span><span id="rDaA">-</span><span id="rDaB">-</span></div>
+        <div class="compare-row"><span class="label">Accel</span><span id="rAcA">-</span><span id="rAcB">-</span></div>
+        <div class="compare-row"><span class="label">관절</span><span id="rAnA">-</span><span id="rAnB">-</span></div>
+        <div class="compare-row header-row"><span class="label">CAPTCHA 점수</span><span id="rFinA">-</span><span id="rFinB">-</span></div>
+        <div class="verdict pass" id="verdict"></div>
+        <div class="redirect-msg" id="redirectMsg"></div>
+        <div class="btn-row"><button class="btn btn-primary" onclick="location.reload()">다시 시도</button></div>
+    </div>
+</div>
+
+<script>
+const VIDEO_BASE = 'https://mukgore.github.io/handcaptcha/';
+const ACTIONS_L = ['l1','l2','l3'], ACTIONS_R = ['r1','r2','r3'];
+const MATCH_ANGLE_THRESH = 38;
+const THRESHOLD = 0.25;
+const W2 = {da:0.38, ac:0.37, a:0.25};
+const MX = {angle:46.9413, dtw_angle:44.0014, accel:0.1926};
+const AT = [[0,5,6],[5,6,7],[6,7,8],[0,9,10],[9,10,11],[10,11,12],[0,13,14],[13,14,15],[14,15,16],[0,17,18],[17,18,19],[18,19,20],[0,1,2],[1,2,3],[2,3,4]];
+const LN = ['WRIST','THUMB_CMC','THUMB_MCP','THUMB_IP','THUMB_TIP','INDEX_MCP','INDEX_PIP','INDEX_DIP','INDEX_TIP','MIDDLE_MCP','MIDDLE_PIP','MIDDLE_DIP','MIDDLE_TIP','RING_MCP','RING_PIP','RING_DIP','RING_TIP','PINKY_MCP','PINKY_PIP','PINKY_DIP','PINKY_TIP'];
+const FORMS_URL = 'https://forms.gle/ji8KMSwBzbxXzTUv6';
+
+// ===== A/B 실험 구조 =====
+const abOrder = Math.random() < 0.5 ? ['A','B'] : ['B','A'];
+let trialIdx = 0;            // 0 = 첫 번째 실험, 1 = 두 번째 실험
+let trialResults = {};        // {A: {...}, B: {...}}
+let savedKeyframeSpec = null; // 두 실험 동일 키프레임
+
+let selectedHand = null, pid = '';
+let targetLm = null;
+let hands = null, camStream = null, animId = null, lastLm = null, baseData = null;
+let keyframes = [], kfIdx = 0, phase = 'idle';
+let matchStart = 0, recStart = 0, segments = [], curSegFrames = [];
+let trialStartTime = 0;
+
+const rv = document.getElementById('refVideo');
+const rc = document.getElementById('refCanvas');
+const rctx = rc.getContext('2d');
+const cv = document.getElementById('cameraVideo');
+const cc = document.getElementById('cameraCanvas');
+const ctx = cc.getContext('2d');
+
+function currentMode(){ return abOrder[trialIdx]; }
+
+// ===== DATA LOADING =====
+async function loadBase(){
+    try{ const r = await fetch(VIDEO_BASE+'landmarks_base.json'); baseData = await r.json(); }
+    catch(e){ try{ const r = await fetch('landmarks_base.json'); baseData = await r.json(); }catch(e2){} }
+}
+function getBase(action){
+    if(!baseData) return null;
+    for(const k of Object.keys(baseData)) if(k.startsWith(action+'_baseline')){
+        const d=baseData[k], info=d.video_info||{}, w=info.width||720, h=info.height||720;
+        return d.frames.filter(f=>f.detected&&f.landmarks_px).map(f=>{ const lm=f.landmarks_px; return LN.map(n=>[lm[n].x/w, lm[n].y/h]); });
+    }
+    return null;
+}
+
+function findKeyframes(baseLm){
+    if(!baseLm||baseLm.length<10) return [0, Math.floor(baseLm.length/2), baseLm.length-1];
+    const vel=[];
+    for(let i=1;i<baseLm.length;i++){
+        let s=0; for(let j=0;j<21;j++){ const dx=baseLm[i][j][0]-baseLm[i-1][j][0], dy=baseLm[i][j][1]-baseLm[i-1][j][1]; s+=Math.sqrt(dx*dx+dy*dy); }
+        vel.push(s/21);
+    }
+    const w=5, sm=[];
+    for(let i=0;i<vel.length;i++){ let s=0,c=0; for(let j=Math.max(0,i-w);j<=Math.min(vel.length-1,i+w);j++){s+=vel[j];c++;} sm.push(s/c); }
+    const mins=[0];
+    for(let i=5;i<sm.length-5;i++) if(sm[i]<sm[i-1]&&sm[i]<sm[i+1]&&sm[i]<0.005&&(mins.length===0||i-mins[mins.length-1]>15)) mins.push(i);
+    mins.push(baseLm.length-1);
+    if(mins.length<=4) return mins;
+    const step=Math.floor(mins.length/3);
+    return [mins[0], mins[step], mins[step*2], mins[mins.length-1]];
+}
+
+function extractVideoFrame(video, canvas, cctx){
+    canvas.width=video.videoWidth||720; canvas.height=video.videoHeight||720;
+    cctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+}
+
+// ===== POSE MATCHING =====
+function ang(p1,j,p2){
+    const v1=[p1[0]-j[0],p1[1]-j[1]], v2=[p2[0]-j[0],p2[1]-j[1]];
+    const dot=v1[0]*v2[0]+v1[1]*v2[1], m1=Math.sqrt(v1[0]*v1[0]+v1[1]*v1[1])+1e-8, m2=Math.sqrt(v2[0]*v2[0]+v2[1]*v2[1])+1e-8;
+    return Math.acos(Math.max(-1,Math.min(1,dot/(m1*m2))))*180/Math.PI;
+}
+function ppSingle(lm){
+    const w=lm[0], n=lm.map(p=>[p[0]-w[0],p[1]-w[1]]);
+    const dx=n[9][0],dy=n[9][1],h=Math.max(Math.sqrt(dx*dx+dy*dy),1e-6);
+    return n.map(p=>[p[0]/h,p[1]/h]);
+}
+function angleErr(uLm, tLm){
+    let tot=0,c=0; for(const[p,j,d]of AT){ tot+=Math.abs(ang(uLm[p],uLm[j],uLm[d])-ang(tLm[p],tLm[j],tLm[d])); c++; }
+    return tot/c;
+}
+
+// ===== SEQUENCE =====
+function genSequence(){
+    if(savedKeyframeSpec){
+        // 두 번째 실험: 같은 키프레임 사용
+        keyframes = savedKeyframeSpec.map(spec => {
+            const baseLm = getBase(spec.action);
+            return { action:spec.action, frameIdx:spec.frameIdx, time:spec.frameIdx/24, baseLm:baseLm[spec.frameIdx], allBaseLm:baseLm };
+        });
+    } else {
+        // 첫 번째 실험: 키프레임 생성 + 저장
+        const acts = selectedHand==='left' ? ACTIONS_L : ACTIONS_R;
+        const sel = [...acts].sort(()=>Math.random()-0.5).slice(0,2);
+        keyframes = [];
+        for(const action of sel){
+            const baseLm = getBase(action);
+            if(!baseLm) continue;
+            const kfIdxs = findKeyframes(baseLm);
+            for(const fi of kfIdxs) keyframes.push({action, frameIdx:fi, time:fi/24, baseLm:baseLm[fi], allBaseLm:baseLm});
+        }
+        savedKeyframeSpec = keyframes.map(kf => ({action:kf.action, frameIdx:kf.frameIdx}));
+    }
+    const prog = document.getElementById('kfProgress');
+    prog.innerHTML = keyframes.map((_,i)=>{
+        const arrow = i<keyframes.length-1 ? '<span class="kf-arrow">→</span>' : '';
+        return `<div class="kf-step"><div class="kf-dot" id="kfd${i}">${i+1}</div>${arrow}</div>`;
+    }).join('');
+}
+
+// ===== SHOW KEYFRAME =====
+function showKeyframe(idx){
+    const kf = keyframes[idx];
+    targetLm = kf.baseLm;
+    document.getElementById('kfLabel').textContent = `자세 ${idx+1}/${keyframes.length}`;
+    document.getElementById('kfInfo').textContent = `${kf.action.toUpperCase()} #${kf.frameIdx}`;
+
+    // 항상 정지 프레임으로 표시
+    rv.style.display = 'none';
+    rc.style.display = 'block';
+    rv.src = VIDEO_BASE + kf.action + '_level3_DIP.mp4';
+    rv.load();
+    rv.oncanplay = () => { rv.currentTime = kf.time; };
+    rv.onseeked = () => { extractVideoFrame(rv,rc,rctx); rv.oncanplay=null; rv.onseeked=null; };
+
+    for(let i=0;i<keyframes.length;i++){
+        document.getElementById('kfd'+i).className = 'kf-dot'+(i<idx?' done':i===idx?' active':'');
+    }
+    phase = 'matching'; matchStart = 0;
+    updateMatchIndicator('waiting','자세를 맞춰주세요');
+    setS('waiting','목표 자세와 같은 손 모양을 취해주세요');
+}
+
+function updateMatchIndicator(cls, text){
+    const mi=document.getElementById('matchInd'); mi.className='match-indicator '+cls; mi.textContent=text;
+}
+function setS(t,h){ const s=document.getElementById('statusBar'); s.className='status-bar '+t; s.innerHTML=h; }
+
+// ===== MODE A: 영상 재생 후 다음 키프레임으로 =====
+function playVideoToNextKeyframe(){
+    phase = 'playing';
+    const fromKf = keyframes[kfIdx];
+    kfIdx++;
+    if(kfIdx >= keyframes.length){ finishTrial(); return; }
+    const toKf = keyframes[kfIdx];
+
+    updateMatchIndicator('playing','▶ 영상 재생 중...');
+    setS('playing','영상을 보면서 다음 자세를 확인하세요');
+
+    // 같은 동작이면 영상 재생, 다른 동작이면 새 영상 로드
+    if(fromKf.action === toKf.action){
+        rv.style.display = 'block'; rc.style.display = 'none';
+        rv.currentTime = fromKf.time;
+        rv.play();
+        const stopTime = toKf.time;
+        const checkLoop = () => {
+            if(rv.currentTime >= stopTime - 0.05){
+                rv.pause();
+                rv.style.display = 'none'; rc.style.display = 'block';
+                extractVideoFrame(rv,rc,rctx);
+                onVideoSegmentDone();
+            } else requestAnimationFrame(checkLoop);
+        };
+        checkLoop();
+    } else {
+        // 다른 동작: 바로 다음 키프레임 정지 이미지 표시
+        rv.src = VIDEO_BASE + toKf.action + '_level3_DIP.mp4';
+        rv.load();
+        rv.oncanplay = () => { rv.currentTime = toKf.time; };
+        rv.onseeked = () => {
+            extractVideoFrame(rv,rc,rctx);
+            rv.oncanplay=null; rv.onseeked=null;
+            onVideoSegmentDone();
+        };
+    }
+
+    document.getElementById('kfLabel').textContent = `자세 ${kfIdx+1}/${keyframes.length}`;
+    document.getElementById('kfInfo').textContent = `${toKf.action.toUpperCase()} #${toKf.frameIdx}`;
+    for(let i=0;i<keyframes.length;i++){
+        document.getElementById('kfd'+i).className = 'kf-dot'+(i<kfIdx?' done':i===kfIdx?' active':'');
+    }
+}
+
+function onVideoSegmentDone(){
+    // 영상 재생 완료 → 사용자가 자세 매칭하면 전환 기록 시작
+    targetLm = keyframes[kfIdx].baseLm;
+    phase = 'matching'; matchStart = 0;
+    updateMatchIndicator('waiting','자세를 맞춰주세요');
+    setS('waiting','영상이 멈췄습니다. 현재 자세를 따라하세요');
+}
+
+// ===== MODE B: 바로 다음 키프레임 이미지 =====
+function showNextKeyframeImage(){
+    kfIdx++;
+    if(kfIdx >= keyframes.length){ finishTrial(); return; }
+    const kf = keyframes[kfIdx];
+    targetLm = kf.baseLm;
+
+    rv.src = VIDEO_BASE + kf.action + '_level3_DIP.mp4';
+    rv.load();
+    rv.oncanplay = () => { rv.currentTime = kf.time; };
+    rv.onseeked = () => { extractVideoFrame(rv,rc,rctx); rv.oncanplay=null; rv.onseeked=null; };
+
+    document.getElementById('kfLabel').textContent = `자세 ${kfIdx+1}/${keyframes.length}`;
+    document.getElementById('kfInfo').textContent = `${kf.action.toUpperCase()} #${kf.frameIdx}`;
+    for(let i=0;i<keyframes.length;i++){
+        document.getElementById('kfd'+i).className = 'kf-dot'+(i<kfIdx?' done':i===kfIdx?' active':'');
+    }
+    phase = 'matching'; matchStart = 0;
+    updateMatchIndicator('waiting','자세를 맞춰주세요');
+    setS('waiting','다음 자세를 따라하세요');
+}
+
+// ===== TRANSITION RECORDING =====
+function startTransitionRecording(){
+    phase = 'recording';
+    recStart = performance.now();
+    curSegFrames = [];
+    document.getElementById('kfd'+kfIdx).className = 'kf-dot rec';
+    updateMatchIndicator('recording','전환 기록 중...');
+    setS('recording','다음 자세로 전환해 주세요');
+
+    const mode = currentMode();
+    if(mode === 'A'){
+        playVideoToNextKeyframe();
+        // Mode A: 영상 재생 + 기록 동시 진행
+        // 매칭은 영상 끝난 후 onVideoSegmentDone에서 시작
+    } else {
+        // Mode B: 바로 다음 키프레임 이미지 표시
+        showNextKeyframeImage();
+    }
+}
+
+function onTransitionMatched(){
+    segments.push({
+        fromKf: kfIdx-1, toKf: kfIdx,
+        fromAction: keyframes[kfIdx-1].action, toAction: keyframes[kfIdx].action,
+        frames: curSegFrames.slice(),
+        duration: curSegFrames.length>0 ? curSegFrames[curSegFrames.length-1].t : 0
+    });
+    document.getElementById('kfd'+(kfIdx-1)).className = 'kf-dot done';
+
+    if(kfIdx >= keyframes.length-1){
+        document.getElementById('kfd'+kfIdx).className = 'kf-dot done';
+        phase = 'done';
+        updateMatchIndicator('matched','✅ 완료!');
+        setS('complete','✅ 모든 동작이 완료되었습니다!');
+        setTimeout(finishTrial, 500);
+    } else {
+        startTransitionRecording();
+    }
+}
+
+// ===== MEDIAPIPE =====
+async function initMP(){
+    hands = new Hands({locateFile:f=>`https://unpkg.com/@mediapipe/hands@0.4.1675469240/${f}`});
+    hands.setOptions({maxNumHands:1, modelComplexity:1, minDetectionConfidence:0.35, minTrackingConfidence:0.4});
+    hands.onResults(onRes);
+    await hands.initialize();
+    document.getElementById('loadingOverlay').classList.add('hidden');
+}
+
+async function initCam(){
+    try{
+        camStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:640},height:{ideal:480}}});
+        cv.srcObject=camStream; await cv.play();
+        cc.width=cv.videoWidth||640; cc.height=cv.videoHeight||480;
+        document.getElementById('cameraPlaceholder').style.display='none'; cc.style.display='block';
+        (async function loop(){ if(cv.readyState>=2) await hands.send({image:cv}); animId=requestAnimationFrame(loop); })();
+    }catch(e){ document.getElementById('cameraPlaceholder').textContent='카메라 접근이 거부되었습니다.'; }
+}
+
+function onRes(r){
+    ctx.save(); ctx.clearRect(0,0,cc.width,cc.height); ctx.translate(cc.width,0); ctx.scale(-1,1);
+    ctx.drawImage(r.image,0,0,cc.width,cc.height); ctx.restore();
+
+    const has = r.multiHandLandmarks && r.multiHandLandmarks.length > 0;
+    if(!has){
+        lastLm=null;
+        if(phase==='recording'||phase==='playing') curSegFrames.push({t:performance.now()-recStart, lm:null});
+        return;
+    }
+
+    const lm = r.multiHandLandmarks[0];
+    lastLm = lm;
+    drawConnectors(ctx, lm.map(l=>({x:1-l.x,y:l.y,z:l.z})), HAND_CONNECTIONS, {color:'#00FF88',lineWidth:2});
+    drawLandmarks(ctx, lm.map(l=>({x:1-l.x,y:l.y,z:l.z})), {color:'#FF4444',lineWidth:1,radius:3});
+
+    const userLm = lm.map(l=>[l.x, l.y]);
+
+    // 매칭 체크
+    if(phase==='matching' && kfIdx<keyframes.length && targetLm){
+        const uPP=ppSingle(userLm), tPP=ppSingle(targetLm);
+        const err=angleErr(uPP, tPP);
+        if(err < MATCH_ANGLE_THRESH){
+            updateMatchIndicator('matched','✅ 자세가 맞습니다!');
+            if(kfIdx===0){
+                document.getElementById('kfd0').className='kf-dot done';
+                startTransitionRecording();
+            } else {
+                onTransitionMatched();
+            }
+        } else {
+            updateMatchIndicator('waiting',`자세를 맞춰주세요 (오차: ${err.toFixed(0)}°)`);
+        }
+    }
+
+    // 기록 중 (Mode A의 playing 포함)
+    if(phase==='recording' || phase==='playing'){
+        curSegFrames.push({t:performance.now()-recStart, lm:userLm});
+        document.getElementById('frameCounter').textContent = curSegFrames.length+' 프레임';
+    }
+}
+
+// ===== UI =====
+function selectHand(h,b){ selectedHand=h; document.querySelectorAll('.hand-btn').forEach(x=>x.classList.remove('selected')); b.classList.add('selected'); checkReady(); }
+function checkReady(){ document.getElementById('btnStart').disabled=!(selectedHand && document.getElementById('inputPid').value.trim()); }
+document.getElementById('inputPid').addEventListener('input', checkReady);
+function showScr(id){ document.querySelectorAll('.screen,.trial-container').forEach(s=>s.classList.remove('active')); document.getElementById(id).classList.add('active'); }
+
+function updateModeBadge(){
+    const badge = document.getElementById('modeBadge');
+    const mode = currentMode();
+    badge.style.display = 'block';
+    badge.className = 'mode-badge mode'+mode;
+    badge.textContent = mode==='A' ? '방안 A — 영상 재생' : '방안 B — 프레임만';
+}
+
+// ===== EXPERIMENT FLOW =====
+async function startExperiment(){
+    pid = document.getElementById('inputPid').value.trim();
+    await loadBase();
+    await initCam();
+    trialIdx = 0;
+    runTrial();
+}
+
+function runTrial(){
+    updateModeBadge();
+    genSequence();
+    segments=[]; kfIdx=0; curSegFrames=[]; trialStartTime=performance.now();
+    document.getElementById('frameCounter').textContent='0 프레임';
+    rv.style.display='none'; rc.style.display='block';
+    showScr('screenTrial');
+    showKeyframe(0);
+}
+
+function finishTrial(){
+    const mode = currentMode();
+    const scores = computeScores();
+    trialResults[mode] = { ...scores, segments:segments.slice(), duration:performance.now()-trialStartTime };
+
+    if(trialIdx === 0){
+        // 중간 화면
+        trialIdx = 1;
+        const nextMode = currentMode();
+        document.getElementById('interTitle').textContent = `✅ ${mode==='A'?'방안 A':'방안 B'} 완료!`;
+        document.getElementById('interDesc').innerHTML =
+            `다음은 <b>${nextMode==='A'?'방안 A (영상 재생)':'방안 B (프레임만)'}</b>입니다.<br>같은 동작 시퀀스를 다른 방식으로 체험합니다.<br>준비되면 버튼을 눌러주세요.`;
+        showScr('screenInter');
+    } else {
+        showFinalResult();
+    }
+}
+
+function startNextTrial(){ runTrial(); }
+
+// ===== METRICS =====
+function pp(f){ if(!f||f.length<3)return null; return f.map(fr=>{ const w=fr[0],n=fr.map(p=>[p[0]-w[0],p[1]-w[1]]); const dx=n[9][0],dy=n[9][1],h=Math.max(Math.sqrt(dx*dx+dy*dy),1e-6); return n.map(p=>[p[0]/h,p[1]/h]); }); }
+function rs(d,n){ if(!d||d.length<3)return null; if(d.length===n)return d; const r=[]; for(let t=0;t<n;t++){ const s=t/(n-1)*(d.length-1),lo=Math.floor(s),hi=Math.min(lo+1,d.length-1),f=s-lo; r.push(d[lo].map((p,i)=>[p[0]*(1-f)+d[hi][i][0]*f,p[1]*(1-f)+d[hi][i][1]*f])); } return r; }
+function mA(t,b){ const tr=rs(t,b.length); if(!tr)return null; let tot=0,c=0; for(const[p,j,d]of AT){ let s=0; for(let i=0;i<b.length;i++) s+=Math.abs(ang(b[i][p],b[i][j],b[i][d])-ang(tr[i][p],tr[i][j],tr[i][d])); tot+=s/b.length;c++; } return tot/c; }
+function mDA(t,b){ if(!t||t.length<3||!b||b.length<3)return null; const tr=rs(t,Math.round(b.length*1.2)); if(!tr)return null; let best=1e9; for(let sh=0;sh<=tr.length-b.length;sh++){ const s=tr.slice(sh,sh+b.length); let tot=0,c=0; for(const[p,j,d]of AT){ let sm=0; for(let i=0;i<b.length;i++) sm+=Math.abs(ang(b[i][p],b[i][j],b[i][d])-ang(s[i][p],s[i][j],s[i][d])); tot+=sm/b.length;c++; } best=Math.min(best,tot/c); } return best; }
+function mAc(t,b){ const tr=rs(t,b.length); if(!tr||b.length<5)return null; function ac(d){ const r=[]; for(let i=1;i<d.length-1;i++){ let s=0,c=0; for(let j=1;j<21;j++){ const ax=d[i+1][j][0]-2*d[i][j][0]+d[i-1][j][0],ay=d[i+1][j][1]-2*d[i][j][1]+d[i-1][j][1]; s+=Math.sqrt(ax*ax+ay*ay);c++; } r.push(s/c); } return r; } const ba=ac(b),ta=ac(tr); if(ba.length!==ta.length)return null; let s=0; for(let i=0;i<ba.length;i++)s+=Math.abs(ba[i]-ta[i]); return s/ba.length; }
+function es(raw,mx,dr,hi=false){ if(raw===null)return 0; const n=mx>0?raw/mx:0; return Math.max(0,Math.min(1,hi?dr*Math.min(1,n):dr*Math.max(0,1-n))); }
+
+function computeScores(){
+    let allUserLm=[], allBaseLm=[];
+    for(const seg of segments){
+        const det=seg.frames.filter(f=>f.lm!==null).map(f=>f.lm);
+        if(det.length<3) continue;
+        const fromKf=keyframes[seg.fromKf], toKf=keyframes[seg.toKf];
+        let baseSeg;
+        if(fromKf.action===toKf.action) baseSeg=fromKf.allBaseLm.slice(fromKf.frameIdx, toKf.frameIdx+1);
+        else baseSeg=[...fromKf.allBaseLm.slice(fromKf.frameIdx), ...toKf.allBaseLm.slice(0,toKf.frameIdx+1)];
+        allUserLm.push(...det); allBaseLm.push(...baseSeg);
+    }
+    const tF=segments.reduce((s,seg)=>s+seg.frames.length,0), dC=allUserLm.length, dR=tF>0?dC/tF:0;
+    const bPP=pp(allBaseLm), tPP=pp(allUserLm);
+    let rA=null, rDA=null, rAc=null;
+    if(tPP&&bPP&&tPP.length>=3){ rA=mA(tPP,bPP); rDA=mDA(tPP,bPP); rAc=mAc(tPP,bPP); }
+    const sA=es(rA,MX.angle,dR), sDA=es(rDA,MX.dtw_angle,dR), sAc=es(rAc,MX.accel,dR);
+    const fin=sDA*W2.da+sAc*W2.ac+sA*W2.a;
+    return { totalSegments:segments.length, tF, dC, dR, rA, rDA, rAc, sA, sDA, sAc, captcha:fin };
+}
+
+function showFinalResult(){
+    const a=trialResults['A']||{}, b=trialResults['B']||{};
+    document.getElementById('rSegA').textContent = (a.totalSegments||0)+'개';
+    document.getElementById('rSegB').textContent = (b.totalSegments||0)+'개';
+    document.getElementById('rDetA').textContent = a.dR!=null ? (a.dR*100).toFixed(0)+'%' : '-';
+    document.getElementById('rDetB').textContent = b.dR!=null ? (b.dR*100).toFixed(0)+'%' : '-';
+    document.getElementById('rDaA').textContent = (a.sDA||0).toFixed(3);
+    document.getElementById('rDaB').textContent = (b.sDA||0).toFixed(3);
+    document.getElementById('rAcA').textContent = (a.sAc||0).toFixed(3);
+    document.getElementById('rAcB').textContent = (b.sAc||0).toFixed(3);
+    document.getElementById('rAnA').textContent = (a.sA||0).toFixed(3);
+    document.getElementById('rAnB').textContent = (b.sA||0).toFixed(3);
+    document.getElementById('rFinA').textContent = (a.captcha||0).toFixed(3);
+    document.getElementById('rFinB').textContent = (b.captcha||0).toFixed(3);
+
+    const v=document.getElementById('verdict');
+    const diff = (b.captcha||0) - (a.captcha||0);
+    v.textContent = `방안 A: ${(a.captcha||0).toFixed(3)} / 방안 B: ${(b.captcha||0).toFixed(3)} (차이: ${diff>0?'+':''}${diff.toFixed(3)})`;
+
+    // Auto-download
+    const result = {
+        experimentInfo: { participantId:pid, selectedHand, timestamp:Date.now(), abOrder, version:'ab_comparison' },
+        keyframeSpec: savedKeyframeSpec,
+        trialA: { mode:'A', ...trialResults['A'], segments: trialResults['A']?.segments?.map(seg=>({ fromKf:seg.fromKf, toKf:seg.toKf, fromAction:seg.fromAction, toAction:seg.toAction, totalFrames:seg.frames.length, detectedFrames:seg.frames.filter(f=>f.lm!==null).length, duration:seg.duration, frames:seg.frames })) },
+        trialB: { mode:'B', ...trialResults['B'], segments: trialResults['B']?.segments?.map(seg=>({ fromKf:seg.fromKf, toKf:seg.toKf, fromAction:seg.fromAction, toAction:seg.toAction, totalFrames:seg.frames.length, detectedFrames:seg.frames.filter(f=>f.lm!==null).length, duration:seg.duration, frames:seg.frames })) }
+    };
+    const blob=new Blob([JSON.stringify(result,null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const dl=document.createElement('a'); dl.href=url; dl.download=`captcha_ab_${pid}_${Date.now()}.json`; dl.click();
+    URL.revokeObjectURL(url);
+
+    showScr('screenResult');
+    let countdown=8;
+    const msg=document.getElementById('redirectMsg');
+    msg.textContent=`${countdown}초 후 사용성 설문으로 이동합니다...`;
+    const timer=setInterval(()=>{ countdown--; if(countdown<=0){clearInterval(timer);window.location.href=FORMS_URL;} else msg.textContent=`${countdown}초 후 사용성 설문으로 이동합니다...`; },1000);
+}
+
+initMP().catch(e=>{ document.getElementById('loadingOverlay').innerHTML='<p style="color:var(--danger);padding:24px;">MediaPipe 로딩 실패</p>'; });
+</script>
+</body>
+</html>
