@@ -137,12 +137,15 @@
 <script>
 const VIDEO_BASE = 'https://mukgore.github.io/handcaptcha/';
 const ACTIONS_L = ['l1','l2','l3'], ACTIONS_R = ['r1','r2','r3'];
-const MATCH_ANGLE_THRESH = 30;
-const MATCH_HOLD_MS = 350;
+
+const MATCH_ANGLE_THRESH = 32;     
+const MATCH_HOLD_MS = 400;         
+const GRACE_PERIOD_MS = 200;       
+
 const THRESHOLD = 0.25;
 const W2 = {da:0.38, ac:0.37, a:0.25};
 const MX = {angle:46.9413, dtw_angle:44.0014, accel:0.1926};
-const LP = [[5,6],[6,7],[7,8],[9,10],[10,11],[11,12],[13,14],[14,15],[15,16],[17,18],[18,19],[19,20],[1,2],[2,3],[3,4],[4,8],[8,12],[12,16],[16,20],[4,20],[8,20]];
+
 const AT = [[0,5,6],[5,6,7],[6,7,8],[0,9,10],[9,10,11],[10,11,12],[0,13,14],[13,14,15],[14,15,16],[0,17,18],[17,18,19],[18,19,20],[0,1,2],[1,2,3],[2,3,4]];
 const LN = ['WRIST','THUMB_CMC','THUMB_MCP','THUMB_IP','THUMB_TIP','INDEX_MCP','INDEX_PIP','INDEX_DIP','INDEX_TIP','MIDDLE_MCP','MIDDLE_PIP','MIDDLE_DIP','MIDDLE_TIP','RING_MCP','RING_PIP','RING_DIP','RING_TIP','PINKY_MCP','PINKY_PIP','PINKY_DIP','PINKY_TIP'];
 const FORMS_URL = 'https://forms.gle/ji8KMSwBzbxXzTUv6';
@@ -169,7 +172,7 @@ async function loadBase(){
         try{
             const r = await fetch('landmarks_base.json');
             baseData = await r.json();
-        } catch(e2){ console.error('No base'); }
+        } catch(e2){ console.error('No base data'); }
     }
 }
 
@@ -177,8 +180,7 @@ function getBase(action){
     if(!baseData) return null;
     for(const k of Object.keys(baseData)){
         if(k.startsWith(action + '_baseline')){
-            const d = baseData[k];
-            const info = d.video_info || {};
+            const d = baseData[k], info = d.video_info || {};
             const w = info.width || 720, h = info.height || 720;
             return d.frames
                 .filter(f => f.detected && f.landmarks_px)
@@ -194,7 +196,6 @@ function getBase(action){
 // ===== KEYFRAME DETECTION =====
 function findKeyframes(baseLm){
     if(!baseLm || baseLm.length < 10) return [0, Math.floor(baseLm.length/2), baseLm.length-1];
-    // (기존 로직 그대로 유지)
     const vel = [];
     for(let i=1; i<baseLm.length; i++){
         let s = 0;
@@ -268,13 +269,7 @@ function genSequence(){
         const kfIdxs = findKeyframes(baseLm);
         const fps = 24;
         for(const fi of kfIdxs){
-            keyframes.push({
-                action,
-                frameIdx: fi,
-                time: fi/fps,
-                baseLm: baseLm[fi],
-                allBaseLm: baseLm
-            });
+            keyframes.push({action, frameIdx: fi, time: fi/fps, baseLm: baseLm[fi], allBaseLm: baseLm});
         }
     }
 
@@ -297,8 +292,7 @@ function showKeyframe(idx){
     rv.oncanplay = () => { rv.currentTime = kf.time; };
     rv.onseeked = () => {
         extractVideoFrame(rv, rc, rctx);
-        rv.oncanplay = null;
-        rv.onseeked = null;
+        rv.oncanplay = null; rv.onseeked = null;
     };
 
     for(let i=0; i<keyframes.length; i++){
@@ -317,7 +311,6 @@ function updateMatchIndicator(cls, text){
     mi.textContent = text;
 }
 
-// ===== RECORDING =====
 function startTransitionRecording(){
     phase = 'recording';
     recStart = performance.now();
@@ -333,13 +326,9 @@ function startTransitionRecording(){
         rv.src = VIDEO_BASE + kf.action + '_level3_DIP.mp4';
         rv.load();
         rv.oncanplay = () => { rv.currentTime = kf.time; };
-        rv.onseeked = () => {
-            extractVideoFrame(rv, rc, rctx);
-            rv.oncanplay = null; rv.onseeked = null;
-        };
+        rv.onseeked = () => { extractVideoFrame(rv, rc, rctx); rv.oncanplay = null; rv.onseeked = null; };
         document.getElementById('kfLabel').textContent = `자세 ${kfIdx+1}/${keyframes.length}`;
         document.getElementById('kfInfo').textContent = `${kf.action.toUpperCase()} — 프레임 ${kf.frameIdx}`;
-
         for(let i=0; i<keyframes.length; i++){
             const d = document.getElementById('kfd'+i);
             d.className = 'kf-dot' + (i < kfIdx ? ' done' : i === kfIdx ? ' active' : '');
@@ -349,24 +338,20 @@ function startTransitionRecording(){
 
 function onTransitionMatched(){
     segments.push({
-        fromKf: kfIdx-1,
-        toKf: kfIdx,
-        fromAction: keyframes[kfIdx-1].action,
-        toAction: keyframes[kfIdx].action,
+        fromKf: kfIdx-1, toKf: kfIdx,
+        fromAction: keyframes[kfIdx-1].action, toAction: keyframes[kfIdx].action,
         frames: curSegFrames.slice(),
         duration: curSegFrames.length > 0 ? curSegFrames[curSegFrames.length-1].t : 0
     });
 
-    const dot = document.getElementById('kfd'+(kfIdx-1));
-    dot.className = 'kf-dot done';
+    document.getElementById('kfd'+(kfIdx-1)).className = 'kf-dot done';
 
     if(kfIdx >= keyframes.length-1){
-        const dot2 = document.getElementById('kfd'+kfIdx);
-        dot2.className = 'kf-dot done';
+        document.getElementById('kfd'+kfIdx).className = 'kf-dot done';
         phase = 'done';
         updateMatchIndicator('matched', '✅ 완료!');
         setS('complete', '✅ 모든 동작이 완료되었습니다!');
-        setTimeout(() => compute(), 500);
+        setTimeout(compute, 500);
     } else {
         phase = 'matching';
         matchStart = 0;
@@ -375,10 +360,15 @@ function onTransitionMatched(){
     }
 }
 
-// ===== MEDIAPIPE (수정된 핵심 부분) =====
+// ===== MEDIAPIPE =====
 async function initMP(){
     hands = new Hands({locateFile: f => `https://unpkg.com/@mediapipe/hands@0.4.1675469240/${f}`});
-    hands.setOptions({maxNumHands:1, modelComplexity:1, minDetectionConfidence:0.5, minTrackingConfidence:0.5});
+    hands.setOptions({
+        maxNumHands: 1,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.4,
+        minTrackingConfidence: 0.45
+    });
     hands.onResults(onRes);
     await hands.initialize();
     document.getElementById('loadingOverlay').classList.add('hidden');
@@ -386,9 +376,7 @@ async function initMP(){
 
 async function initCam(){
     try{
-        camStream = await navigator.mediaDevices.getUserMedia({
-            video: {facingMode:'user', width:{ideal:640}, height:{ideal:480}}
-        });
+        camStream = await navigator.mediaDevices.getUserMedia({video: {facingMode:'user', width:{ideal:640}, height:{ideal:480}}});
         cv.srcObject = camStream;
         await cv.play();
         cc.width = cv.videoWidth || 640;
@@ -406,84 +394,82 @@ async function initCam(){
 }
 
 function onRes(r){
-    // 미러링 + 카메라 그리기
-    ctx.save();
-    ctx.clearRect(0, 0, cc.width, cc.height);
-    ctx.translate(cc.width, 0);
-    ctx.scale(-1, 1);
-    ctx.drawImage(r.image, 0, 0, cc.width, cc.height);
+    ctx.save(); 
+    ctx.clearRect(0,0,cc.width,cc.height); 
+    ctx.translate(cc.width,0); 
+    ctx.scale(-1,1);
+    ctx.drawImage(r.image,0,0,cc.width,cc.height); 
     ctx.restore();
 
     const has = r.multiHandLandmarks && r.multiHandLandmarks.length > 0;
-
-    if(has){
-        const lm = r.multiHandLandmarks[0];
-        lastLm = lm;
-
-        // 손 그리기
-        drawConnectors(ctx, lm.map(l => ({x:1-l.x, y:l.y, z:l.z})), HAND_CONNECTIONS, {color:'#00FF88', lineWidth:2});
-        drawLandmarks(ctx, lm.map(l => ({x:1-l.x, y:l.y, z:l.z})), {color:'#FF4444', lineWidth:1, radius:3});
-
-        const userLm = lm.map(l => [l.x, l.y]);
-
-        // ==================== 수정된 매칭 로직 ====================
-        if(phase === 'matching' && kfIdx < keyframes.length && targetLm){
-    const target = keyframes[kfIdx].baseLm;
-    const uPP = ppSingle(userLm);
-    const tPP = ppSingle(target);
-    const err = angleErr(uPP, tPP);
-
-    if(err < MATCH_ANGLE_THRESH){
-        if(matchStart === 0) matchStart = performance.now();
-        
-        const held = performance.now() - matchStart;
-        const progress = Math.min(100, Math.round(held / MATCH_HOLD_MS * 100));
-        
-        updateMatchIndicator('matched', `맞춤 중... ${progress}%`);
-
-        if(held >= MATCH_HOLD_MS){
-            matchStart = 0;
-            if(kfIdx === 0){
-                document.getElementById('kfd0').className = 'kf-dot done';
-                startTransitionRecording();
-            } else {
-                onTransitionMatched();
-            }
-        }
-    } else {
-        // 인식 끊김이 잦을 때 너무 빨리 리셋되지 않도록 grace period 추가
-        if(matchStart > 0 && (performance.now() - matchStart) < 150){ 
-            // 150ms 이내의 작은 끊김은 관대하게 유지
-        } else {
-            matchStart = 0;
-            updateMatchIndicator('waiting', `자세를 맞춰주세요 (오차: ${err.toFixed(0)}°)`);
-        }
+    if(!has){
+        lastLm = null;
+        if(phase === 'recording') curSegFrames.push({t: performance.now()-recStart, lm: null});
+        return;
     }
-}
-        if(phase === 'recording'){
-            curSegFrames.push({t: performance.now() - recStart, lm: userLm});
-            document.getElementById('frameCounter').textContent = curSegFrames.length + ' 프레임';
 
-            if(kfIdx < keyframes.length){
-                const target = keyframes[kfIdx].baseLm;
-                const uPP = ppSingle(userLm);
-                const tPP = ppSingle(target);
-                const err = angleErr(uPP, tPP);
+    const lm = r.multiHandLandmarks[0];
+    lastLm = lm;
 
-                if(err < MATCH_ANGLE_THRESH){
-                    if(matchStart === 0) matchStart = performance.now();
-                    if(performance.now() - matchStart >= MATCH_HOLD_MS){
-                        onTransitionMatched();
-                    }
+    drawConnectors(ctx, lm.map(l=>({x:1-l.x,y:l.y,z:l.z})), HAND_CONNECTIONS, {color:'#00FF88',lineWidth:2});
+    drawLandmarks(ctx, lm.map(l=>({x:1-l.x,y:l.y,z:l.z})), {color:'#FF4444',lineWidth:1,radius:3});
+
+    const userLm = lm.map(l => [l.x, l.y]);
+
+    // ==================== 개선된 Matching 로직 ====================
+    if(phase === 'matching' && kfIdx < keyframes.length && targetLm){
+        const target = keyframes[kfIdx].baseLm;
+        const uPP = ppSingle(userLm);
+        const tPP = ppSingle(target);
+        const err = angleErr(uPP, tPP);
+
+        if(err < MATCH_ANGLE_THRESH){
+            if(matchStart === 0) matchStart = performance.now();
+
+            const held = performance.now() - matchStart;
+            const progress = Math.min(100, Math.round(held / MATCH_HOLD_MS * 100));
+            updateMatchIndicator('matched', `맞춤 중... ${progress}%`);
+
+            if(held >= MATCH_HOLD_MS){
+                matchStart = 0;
+                if(kfIdx === 0){
+                    document.getElementById('kfd0').className = 'kf-dot done';
+                    startTransitionRecording();
                 } else {
-                    matchStart = 0;
+                    onTransitionMatched();
                 }
             }
+        } else {
+            // Grace period: 한 번 진행 중이었으면 짧은 오차는 무시
+            if(matchStart > 0 && (performance.now() - matchStart) < GRACE_PERIOD_MS){
+                const held = performance.now() - matchStart;
+                const progress = Math.min(100, Math.round(held / MATCH_HOLD_MS * 100));
+                updateMatchIndicator('matched', `맞춤 중... ${progress}%`);
+            } else {
+                matchStart = 0;
+                updateMatchIndicator('waiting', `자세를 맞춰주세요 (오차: ${err.toFixed(0)}°)`);
+            }
         }
-    } else {
-        lastLm = null;
-        if(phase === 'recording'){
-            curSegFrames.push({t: performance.now() - recStart, lm: null});
+    }
+
+    if(phase === 'recording'){
+        curSegFrames.push({t: performance.now()-recStart, lm: userLm});
+        document.getElementById('frameCounter').textContent = curSegFrames.length + ' 프레임';
+
+        if(kfIdx < keyframes.length){
+            const target = keyframes[kfIdx].baseLm;
+            const uPP = ppSingle(userLm);
+            const tPP = ppSingle(target);
+            const err = angleErr(uPP, tPP);
+
+            if(err < MATCH_ANGLE_THRESH){
+                if(matchStart === 0) matchStart = performance.now();
+                if(performance.now() - matchStart >= MATCH_HOLD_MS){
+                    onTransitionMatched();
+                }
+            } else {
+                matchStart = 0;
+            }
         }
     }
 }
@@ -509,7 +495,7 @@ function checkReady(){
 document.getElementById('inputPid').addEventListener('input', checkReady);
 
 function showScr(id){
-    document.querySelectorAll('.screen, .trial-container').forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('.screen,.trial-container').forEach(s => s.classList.remove('active'));
     document.getElementById(id).classList.add('active');
 }
 
@@ -524,34 +510,209 @@ async function startCaptcha(){
     showKeyframe(0);
 }
 
-// ===== METRICS (기존 그대로) =====
-function pp(f){ /* 기존 pp 함수 그대로 */ 
-    if(!f||f.length<3)return null;
-    return f.map(fr=>{const w=fr[0],n=fr.map(p=>[p[0]-w[0],p[1]-w[1]]);const dx=n[9][0],dy=n[9][1],h=Math.max(Math.sqrt(dx*dx+dy*dy),1e-6);return n.map(p=>[p[0]/h,p[1]/h]);});
+// ===== METRICS =====
+function pp(f){
+    if(!f || f.length < 3) return null;
+    return f.map(fr => {
+        const w = fr[0];
+        const n = fr.map(p => [p[0]-w[0], p[1]-w[1]]);
+        const dx = n[9][0], dy = n[9][1];
+        const h = Math.max(Math.sqrt(dx*dx + dy*dy), 1e-6);
+        return n.map(p => [p[0]/h, p[1]/h]);
+    });
 }
-function rs(d,n){ /* 기존 rs 함수 그대로 */ 
-    if(!d||d.length<3)return null;
-    if(d.length===n)return d;
-    const r=[];
-    for(let t=0;t<n;t++){
-        const s=t/(n-1)*(d.length-1), lo=Math.floor(s), hi=Math.min(lo+1,d.length-1), f=s-lo;
-        r.push(d[lo].map((p,i)=>[p[0]*(1-f)+d[hi][i][0]*f, p[1]*(1-f)+d[hi][i][1]*f]));
+
+function rs(d, n){
+    if(!d || d.length < 3) return null;
+    if(d.length === n) return d;
+    const r = [];
+    for(let t = 0; t < n; t++){
+        const s = t / (n-1) * (d.length-1);
+        const lo = Math.floor(s), hi = Math.min(lo+1, d.length-1);
+        const f = s - lo;
+        r.push(d[lo].map((p,i) => [
+            p[0]*(1-f) + d[hi][i][0]*f,
+            p[1]*(1-f) + d[hi][i][1]*f
+        ]));
     }
     return r;
 }
-function mA(t,b){ /* 기존 mA, mDA, mAc 함수 그대로 유지 */ 
-    /* (생략 - 기존 코드와 동일) */
-}
-function mDA(t,b){ /* ... */ }
-function mAc(t,b){ /* ... */ }
-function es(raw,mx,dr,hi=false){ /* ... */ }
 
-function compute(){ /* 기존 compute 함수 그대로 유지 */ 
-    /* (코드가 매우 길어서 생략하나, 기존과 완전히 동일합니다) */
-    // ... (원본 compute() 내용 그대로 복사)
+function mA(t, b){
+    const tr = rs(t, b.length);
+    if(!tr) return null;
+    let tot = 0, c = 0;
+    for(const [p,j,d] of AT){
+        let s = 0;
+        for(let i=0; i<b.length; i++){
+            s += Math.abs(ang(b[i][p], b[i][j], b[i][d]) - ang(tr[i][p], tr[i][j], tr[i][d]));
+        }
+        tot += s / b.length;
+        c++;
+    }
+    return tot / c;
 }
 
-// 페이지 로드 시 MediaPipe 초기화
+function mDA(t, b){
+    if(!t || t.length < 3 || !b || b.length < 3) return null;
+    const tr = rs(t, Math.round(b.length * 1.2));
+    if(!tr) return null;
+    let best = 1e9;
+    for(let sh = 0; sh <= tr.length - b.length; sh++){
+        const s = tr.slice(sh, sh + b.length);
+        let tot = 0, c = 0;
+        for(const [p,j,d] of AT){
+            let sm = 0;
+            for(let i=0; i<b.length; i++){
+                sm += Math.abs(ang(b[i][p], b[i][j], b[i][d]) - ang(s[i][p], s[i][j], s[i][d]));
+            }
+            tot += sm / b.length;
+            c++;
+        }
+        best = Math.min(best, tot / c);
+    }
+    return best;
+}
+
+function mAc(t, b){
+    const tr = rs(t, b.length);
+    if(!tr || b.length < 5) return null;
+    function ac(d){
+        const r = [];
+        for(let i=1; i<d.length-1; i++){
+            let s = 0, c = 0;
+            for(let j=1; j<21; j++){
+                const ax = d[i+1][j][0] - 2*d[i][j][0] + d[i-1][j][0];
+                const ay = d[i+1][j][1] - 2*d[i][j][1] + d[i-1][j][1];
+                s += Math.sqrt(ax*ax + ay*ay);
+                c++;
+            }
+            r.push(s/c);
+        }
+        return r;
+    }
+    const ba = ac(b), ta = ac(tr);
+    if(ba.length !== ta.length) return null;
+    let s = 0;
+    for(let i=0; i<ba.length; i++) s += Math.abs(ba[i] - ta[i]);
+    return s / ba.length;
+}
+
+function es(raw, mx, dr, hi = false){
+    if(raw === null) return 0;
+    const n = mx > 0 ? raw / mx : 0;
+    return Math.max(0, Math.min(1, hi ? dr * Math.min(1, n) : dr * Math.max(0, 1 - n)));
+}
+
+function compute(){
+    let allUserLm = [], allBaseLm = [];
+    const totalSegments = segments.length;
+
+    for(const seg of segments){
+        const det = seg.frames.filter(f => f.lm !== null).map(f => f.lm);
+        if(det.length < 3) continue;
+
+        const fromKf = keyframes[seg.fromKf];
+        const toKf = keyframes[seg.toKf];
+        let baseSeg;
+        if(fromKf.action === toKf.action){
+            baseSeg = fromKf.allBaseLm.slice(fromKf.frameIdx, toKf.frameIdx + 1);
+        } else {
+            const a = fromKf.allBaseLm.slice(fromKf.frameIdx);
+            const b = toKf.allBaseLm.slice(0, toKf.frameIdx + 1);
+            baseSeg = [...a, ...b];
+        }
+        allUserLm.push(...det);
+        allBaseLm.push(...baseSeg);
+    }
+
+    const tF = segments.reduce((s, seg) => s + seg.frames.length, 0);
+    const dC = allUserLm.length;
+    const dR = tF > 0 ? dC / tF : 0;
+
+    const bPP = pp(allBaseLm);
+    const tPP = pp(allUserLm);
+
+    let rA = null, rDA = null, rAc = null;
+    if(tPP && bPP && tPP.length >= 3){
+        rA = mA(tPP, bPP);
+        rDA = mDA(tPP, bPP);
+        rAc = mAc(tPP, bPP);
+    }
+
+    const sA = es(rA, MX.angle, dR);
+    const sDA = es(rDA, MX.dtw_angle, dR);
+    const sAc = es(rAc, MX.accel, dR);
+
+    const fin = sDA * W2.da + sAc * W2.ac + sA * W2.a;
+
+    // 결과 표시
+    document.getElementById('resSegments').textContent = `${totalSegments}개 전환 구간`;
+    document.getElementById('resDetection').textContent = `${dC}/${tF} (${(dR*100).toFixed(0)}%)`;
+    document.getElementById('resDtwAngle').textContent = sDA.toFixed(3);
+    document.getElementById('resAccel').textContent = sAc.toFixed(3);
+    document.getElementById('resAngle').textContent = sA.toFixed(3);
+    document.getElementById('resFinal').textContent = fin.toFixed(3);
+
+    const v = document.getElementById('verdict');
+    if(fin >= THRESHOLD){
+        v.className = 'verdict pass';
+        v.textContent = `✅ 통과 (${fin.toFixed(3)} ≥ ${THRESHOLD})`;
+    } else {
+        v.className = 'verdict fail';
+        v.textContent = `❌ 차단 (${fin.toFixed(3)} < ${THRESHOLD})`;
+    }
+
+    if(animId) cancelAnimationFrame(animId);
+    if(camStream) camStream.getTracks().forEach(t => t.stop());
+
+    // JSON 다운로드
+    const result = {
+        experimentInfo: {participantId: pid, selectedHand, timestamp: Date.now(), version: 'v2_motion_eval'},
+        keyframes: keyframes.map(kf => ({action: kf.action, frameIdx: kf.frameIdx})),
+        segments: segments.map(seg => ({
+            fromKf: seg.fromKf, toKf: seg.toKf,
+            fromAction: seg.fromAction, toAction: seg.toAction,
+            totalFrames: seg.frames.length,
+            detectedFrames: seg.frames.filter(f => f.lm !== null).length,
+            duration: seg.duration,
+            frames: seg.frames
+        })),
+        scores: {
+            detectionRate: dR, totalFrames: tF, detectedFrames: dC,
+            raw: {angle: rA, dtw_angle: rDA, accel: rAc},
+            estimated: {angle: sA, dtw_angle: sDA, accel: sAc},
+            captcha: fin, threshold: THRESHOLD, passed: fin >= THRESHOLD,
+            weights: W2
+        }
+    };
+
+    const blob = new Blob([JSON.stringify(result, null, 2)], {type: 'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `hand_captcha_v2_${selectedHand}_${pid}_${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    // 결과 화면 표시
+    showScr('screenResult');
+
+    // 5초 후 설문으로 이동
+    let countdown = 5;
+    const msg = document.getElementById('redirectMsg');
+    msg.textContent = `${countdown}초 후 사용성 설문으로 이동합니다...`;
+    const timer = setInterval(() => {
+        countdown--;
+        if(countdown <= 0){
+            clearInterval(timer);
+            window.location.href = FORMS_URL;
+        } else {
+            msg.textContent = `${countdown}초 후 사용성 설문으로 이동합니다...`;
+        }
+    }, 1000);
+}
+
 initMP().catch(e => {
     document.getElementById('loadingOverlay').innerHTML = '<p style="color:var(--danger);padding:24px;">MediaPipe 로딩 실패</p>';
 });
