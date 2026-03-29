@@ -148,6 +148,7 @@ const LN=['WRIST','THUMB_CMC','THUMB_MCP','THUMB_IP','THUMB_TIP','INDEX_MCP','IN
 const FORMS_URL='https://forms.gle/ji8KMSwBzbxXzTUv6';
 
 let selectedHand=null, pid='';
+let targetLm = null;
 let hands=null, camStream=null, animId=null, lastLm=null, baseData=null;
 let keyframes=[], kfIdx=0, phase='idle'; // phases: idle, matching, recording, done
 let matchStart=0, recStart=0, segments=[], curSegFrames=[];
@@ -259,6 +260,7 @@ function genSequence(){
 // ===== SHOW KEYFRAME =====
 function showKeyframe(idx){
     const kf=keyframes[idx];
+    targetLm = kf.baseLm;
     document.getElementById('kfLabel').textContent=`자세 ${idx+1}/${keyframes.length}`;
     document.getElementById('kfInfo').textContent=`${kf.action.toUpperCase()} — 프레임 ${kf.frameIdx}`;
     // Load video and seek to keyframe time
@@ -366,36 +368,64 @@ function onRes(r){
     const has=r.multiHandLandmarks&&r.multiHandLandmarks.length>0;
     if(has){
         const lm=r.multiHandLandmarks[0];
+        log.trials[trialIndex].frames.push({
+    t: performance.now(),
+    kfIndex: kfIdx,
+    phase: phase,
+    landmarks: lm.map(p=>[p.x,p.y,p.z])
+});
         drawConnectors(ctx, lm.map(l=>({x:1-l.x,y:l.y,z:l.z})), HAND_CONNECTIONS, {color:'#00FF88',lineWidth:2});
         drawLandmarks(ctx, lm.map(l=>({x:1-l.x,y:l.y,z:l.z})), {color:'#FF4444',lineWidth:1,radius:3});
         lastLm=lm;
         const userLm=lm.map(l=>[l.x, l.y]);
+        const uPP = ppSingle(userLm);
+        const tPP = ppSingle(targetLm);
+        const err = angleErr(uPP, tPP);
 
-        if(phase==='matching' && kfIdx<keyframes.length){
+        if(phase==='matching' && kfIdx < keyframes.length && targetLm){
             const target=keyframes[kfIdx].baseLm;
             const uPP=ppSingle(userLm), tPP=ppSingle(target);
-            const err=angleErr(uPP, tPP);
-            if(err<MATCH_ANGLE_THRESH){
-                if(matchStart===0) matchStart=performance.now();
-                const held=performance.now()-matchStart;
-                updateMatchIndicator('matched',`맞춤 중... ${Math.min(100,Math.round(held/MATCH_HOLD_MS*100))}%`);
-                if(held>=MATCH_HOLD_MS){
-                    // Matched!
-                    if(kfIdx===0){
-                        // First keyframe matched — start recording to next
-                        const dot=document.getElementById('kfd0');
-                        dot.className='kf-dot done';
-                        startTransitionRecording();
-                    } else {
-                        // Transition target matched
-                        onTransitionMatched();
-                    }
-                }
+            const err=angleErr(uPP, tPP);if(phase==='matching' && kfIdx < keyframes.length && targetLm){
+
+    const target = keyframes[kfIdx].baseLm;
+    const uPP = ppSingle(userLm);
+    const tPP = ppSingle(target);
+    const err = angleErr(uPP, tPP);
+
+    if(err < MATCH_ANGLE_THRESH){
+
+        if(matchStart === 0)
+            matchStart = performance.now();
+
+        const held = performance.now() - matchStart;
+
+        updateMatchIndicator(
+            'matched',
+            `맞춤 중... ${Math.min(100, Math.round(held / MATCH_HOLD_MS * 100))}%`
+        );
+
+        if(held >= MATCH_HOLD_MS){
+
+            matchStart = 0;
+
+            if(kfIdx === 0){
+                const dot = document.getElementById('kfd0');
+                dot.className = 'kf-dot done';
+                startTransitionRecording();
             } else {
-                matchStart=0;
-                updateMatchIndicator('waiting',`자세를 맞춰주세요 (오차: ${err.toFixed(0)}°)`);
+                onTransitionMatched();
             }
         }
+
+    } else {
+        matchStart = 0;
+
+        updateMatchIndicator(
+            'waiting',
+            `자세를 맞춰주세요 (오차: ${err.toFixed(0)}°)`
+        );
+    }
+}
 
         if(phase==='recording'){
             curSegFrames.push({t:performance.now()-recStart, lm:userLm});
