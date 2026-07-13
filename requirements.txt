@@ -1,0 +1,7 @@
+# mediapipe>=0.10.18 dropped the legacy solutions.hands API (Hands/world
+# landmarks) this pipeline relies on, in favor of the Tasks API. Pin to the
+# same version handtest1.py uses until the pipeline is ported to
+# mediapipe.tasks.python.vision.HandLandmarker.
+mediapipe==0.10.14
+opencv-python-headless
+numpy
