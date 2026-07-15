@@ -27,7 +27,8 @@
         .ref-area{flex:1;display:flex;align-items:center;justify-content:center;background:#0f172a;position:relative;min-height:0}
         .ref-area canvas{width:100%;height:100%;object-fit:contain;transition:opacity 0.5s ease}
         .ref-area canvas.fading{opacity:0}
-        .ref-area video{width:100%;height:100%;object-fit:contain;display:none}
+        .ref-area video{width:100%;height:100%;object-fit:contain;display:none;transition:opacity .5s ease}
+        .ref-area video.fading{opacity:0}
         .keyframe-label{position:absolute;top:12px;left:12px;background:rgba(0,0,0,.7);color:#fff;font-size:12px;padding:4px 10px;border-radius:6px;font-weight:500;z-index:5}
         .match-indicator{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);padding:6px 16px;border-radius:20px;font-size:13px;font-weight:600;z-index:5;transition:all .2s}
         .match-indicator.waiting{background:rgba(245,158,11,.9);color:#fff}
@@ -115,6 +116,9 @@
 // this at a CDN/bucket instead of GitHub Pages is a pure config change.
 const POOL_BASE = 'https://mukgore.github.io/handcaptcha/';
 const MATCH_ANGLE_THRESH = 38;
+// 한 프레임의 우연한 일치로 즉시 통과하지 않도록, 일치 상태가 이 시간 이상
+// 연속 유지되어야 매칭으로 인정한다.
+const MATCH_HOLD_MS = 200;
 const THRESHOLD = 0.25;
 const W2 = {da:0.38, ac:0.37, a:0.25};
 const MX = {angle:46.9413, dtw_angle:44.0014, accel:0.1926};
@@ -153,9 +157,12 @@ const FRAMING_GUIDE_POSE = [
 const FRAMING_GUIDE_FILL = 'rgba(100,116,139,0.55)'; // slate, distinct from the blue matching-fallback ghost
 const FRAMING_WIGGLE_AMP = 0.012;
 const FRAMING_EDGE_MARGIN = 0.02;
-const FRAMING_PASS_HOLD_MS = 400;
+const FRAMING_PASS_HOLD_MS = 500;
 const FRAMING_TIMEOUT_MS = 6000;
-const FRAMING_FADE_MS = 400;
+const FRAMING_FADE_MS = 500;
+// 가이드 통과 전에 첫 자세가 먼저 매칭돼 kfIdx가 넘어간 경우, 오버레이를
+// 즉시 끊지 않고 이 시간만큼 기다렸다가 페이드아웃한다.
+const FRAMING_DISMISS_WAIT_MS = 500;
 const FRAMING_DEFAULT_MSG = '카메라 프레임 안에 손을 맞춰주세요';
 const FRAMING_MESSAGES = {
     no_hand: '손이 보이지 않아요. 카메라 쪽으로 손을 조금 더 가까이 대주세요.',
@@ -172,6 +179,7 @@ let keyframes = [], kfIdx = 0;
 // phase: 'idle' | 'detecting_hand' | 'matching' | 'recording' | 'done'
 let phase = 'idle';
 let recStart = 0, segments = [], curSegFrames = [];
+let matchHoldStart = null;
 let videoPlaying = false;
 let fading = false;
 
@@ -206,9 +214,15 @@ async function loadPoolManifest(){
 }
 async function loadClipLandmarks(clip){
     if(landmarksCache[clip.clip_id]) return landmarksCache[clip.clip_id];
-    let d;
-    try{ const r = await fetch(POOL_BASE + clip.landmarks_file); d = await r.json(); }
-    catch(e){ const r = await fetch(clip.landmarks_file); d = await r.json(); }
+    // fetch()는 404에서도 resolve되므로 r.ok를 확인해야 한다 -- 안 하면 GitHub
+    // Pages의 404 HTML을 r.json()이 파싱하다 실패한다.
+    let d = null;
+    try{ const r = await fetch(POOL_BASE + clip.landmarks_file); if(r.ok) d = await r.json(); }catch(e){}
+    if(!d){
+        const r = await fetch(clip.landmarks_file);
+        if(!r.ok) throw new Error(`landmarks not found: ${clip.landmarks_file}`);
+        d = await r.json();
+    }
     landmarksCache[clip.clip_id] = d;
     return d;
 }
@@ -220,10 +234,17 @@ function getBaseFromLandmarkData(d, mirror){
     // pose-matching/scoring comparison is against the same thing the user
     // actually sees on screen, not the original unmirrored recording.
     const info = d.video_info||{}, w=info.width||720, h=info.height||720;
-    return d.frames.filter(f=>f.detected&&f.landmarks_px).map(f=>{
+    // 미검출 프레임을 걸러내면 배열 인덱스가 원본 비디오 프레임 번호와 어긋난다.
+    // 랜드마크 배열(frames)과 원본 프레임 번호(origIdx)를 나란히 반환해서,
+    // 비디오 시킹(time = origIdx/fps)이 항상 실제 영상 프레임과 일치하게 한다.
+    const frames=[], origIdx=[];
+    d.frames.forEach((f,i)=>{
+        if(!f.detected||!f.landmarks_px) return;
         const lm=f.landmarks_px;
-        return LN.map(n => mirror ? [1 - lm[n].x/w, lm[n].y/h] : [lm[n].x/w, lm[n].y/h]);
+        frames.push(LN.map(n => mirror ? [1 - lm[n].x/w, lm[n].y/h] : [lm[n].x/w, lm[n].y/h]));
+        origIdx.push(f.frame_idx !== undefined ? f.frame_idx : i);
     });
+    return {frames, origIdx};
 }
 function getInfoFromLandmarkData(d){
     const info = d.video_info || {};
@@ -244,13 +265,6 @@ function findKeyframes(baseLm){
     if(mins.length<=4) return mins;
     const step=Math.floor(mins.length/3);
     return [mins[0], mins[step], mins[step*2], mins[mins.length-1]];
-}
-function extractVideoFrame(video, canvas, cctx, mirror){
-    canvas.width=video.videoWidth||720; canvas.height=video.videoHeight||720;
-    cctx.save();
-    if(mirror){ cctx.translate(canvas.width, 0); cctx.scale(-1, 1); }
-    cctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    cctx.restore();
 }
 
 // ===== POSE MATCHING =====
@@ -352,18 +366,26 @@ async function genSequence(){
         console.error(`Pool has only ${candidates.length} clips total (need >= 2)`);
     }
     const shuffled = [...candidates].sort(() => Math.random()-0.5);
-    const challengeClips = shuffled.slice(0, 2);
 
+    // manifest에 있어도 landmarks 파일이 서버에 없는(404) 클립이 있을 수 있다.
+    // 고정된 2개를 뽑아 실패 시 그대로 죽는 대신, 셔플된 목록을 순회하며
+    // 실제로 로드에 성공한 클립 2개를 채울 때까지 시도한다.
     keyframes = [];
-    for(const clip of challengeClips){
+    let usedClips = 0;
+    for(const clip of shuffled){
+        if(usedClips >= 2) break;
         const mirror = clip.handedness !== handLabel;
-        const d = await loadClipLandmarks(clip);
-        const baseLm = getBaseFromLandmarkData(d, mirror);
+        let d;
+        try{ d = await loadClipLandmarks(clip); }
+        catch(e){ console.error(`clip ${clip.clip_id}: landmarks load failed, skipping`, e); continue; }
+        const {frames: baseLm, origIdx} = getBaseFromLandmarkData(d, mirror);
         if(!baseLm || baseLm.length === 0) continue;
         const info = getInfoFromLandmarkData(d);
         const kfIdxs = findKeyframes(baseLm);
-        for(const fi of kfIdxs) keyframes.push({clip, mirror, frameIdx:fi, time:fi/info.fps, baseLm:baseLm[fi], allBaseLm:baseLm, fps:info.fps, width:info.width, height:info.height});
+        for(const fi of kfIdxs) keyframes.push({clip, mirror, frameIdx:fi, time:origIdx[fi]/info.fps, baseLm:baseLm[fi], allBaseLm:baseLm, fps:info.fps, width:info.width, height:info.height});
+        usedClips++;
     }
+    if(usedClips < 2) console.error(`Only ${usedClips} usable clips loaded (need 2)`);
     const prog = document.getElementById('kfProgress');
     prog.innerHTML = keyframes.map((_,i)=>{
         const arrow = i<keyframes.length-1 ? '<span class="kf-arrow">→</span>' : '';
@@ -449,8 +471,9 @@ function drawFramingGuideOverlay(now){
     if(framingOverlayDone) return;
     let alpha = 0.55;
     if(framingFadeStart !== null){
+        // framingFadeStart는 미래 시각일 수 있다(대기 후 페이드) -- t<0 동안은 완전 불투명 유지
         const t = (now - framingFadeStart) / FRAMING_FADE_MS;
-        alpha *= Math.max(0, 1 - t);
+        alpha *= Math.min(1, Math.max(0, 1 - t));
         if(t >= 1){
             framingOverlayDone = true;
             if(phase === 'matching' && kfIdx === 0) setS('waiting', '목표 동작을 따라해주세요');
@@ -464,11 +487,16 @@ function drawFramingGuideOverlay(now){
 
 function startRealChallenge(){
     stopGhostLoop();
-    segments = []; kfIdx = 0; curSegFrames = [];
+    if(keyframes.length === 0){
+        phase = 'idle';
+        updateMatchIndicator('waiting', '데이터 로드 실패');
+        setS('waiting', '챌린지 데이터를 불러오지 못했습니다. 페이지를 새로고침 해주세요.');
+        return;
+    }
+    segments = []; kfIdx = 0; curSegFrames = []; matchHoldStart = null;
     framingState = null; framingStateSince = performance.now(); framingTimeoutMsgShown = false;
     framingFadeStart = null; framingOverlayDone = false; framingGuideStartTime = performance.now();
     document.getElementById('frameCounter').textContent = '0 프레임';
-    rv.style.display = 'none'; rc.style.display = 'block';
     showKeyframeImage(0);
     phase = 'matching';
     updateMatchIndicator('waiting', '자세를 맞춰주세요');
@@ -482,12 +510,20 @@ function showKeyframeImage(idx){
     document.getElementById('kfLabel').textContent = `자세 ${idx+1}/${keyframes.length}`;
     document.getElementById('kfInfo').textContent = `${kf.clip.clip_id} #${kf.frameIdx}`;
 
-    rv.style.transform = 'none'; // canvas-level mirror below handles this snapshot; rv itself stays hidden
-    rv.style.display = 'none'; rc.style.display = 'block';
-    rv.src = POOL_BASE + kf.clip.video_file;
-    rv.load();
-    rv.oncanplay = () => { rv.currentTime = kf.time; };
-    rv.onseeked = () => { extractVideoFrame(rv,rc,rctx,kf.mirror); rv.oncanplay=null; rv.onseeked=null; };
+    // 목표 자세는 캔버스에 스냅샷을 그리는 게 아니라, 숨겨져 있던 <video>
+    // 자체를 해당 키프레임 시각에 멈춘 상태로 그대로 보여준다. 캔버스(rc)는
+    // 이제 고스트 폴백 재생 전용이다.
+    rv.pause();
+    rv.style.transform = kf.mirror ? 'scaleX(-1)' : 'none';
+    rv.style.display = 'block'; rc.style.display = 'none';
+    const src = POOL_BASE + kf.clip.video_file;
+    if(rv.src !== src){
+        rv.src = src;
+        rv.load();
+        rv.oncanplay = () => { rv.currentTime = kf.time; rv.oncanplay = null; };
+    } else {
+        rv.currentTime = kf.time;
+    }
 
     updateDots(idx);
 }
@@ -512,7 +548,7 @@ function beginNextTransition(){
     videoPlaying = false;
     recStart = performance.now();
     curSegFrames = [];
-    document.getElementById('kfd'+kfIdx).className = 'kf-dot rec';
+    matchHoldStart = null;
 
     kfIdx++;
     if(kfIdx >= keyframes.length){ showResult(); return; }
@@ -521,6 +557,9 @@ function beginNextTransition(){
     document.getElementById('kfLabel').textContent = `자세 ${kfIdx+1}/${keyframes.length}`;
     document.getElementById('kfInfo').textContent = `${keyframes[kfIdx].clip.clip_id} #${keyframes[kfIdx].frameIdx}`;
     updateDots(kfIdx);
+    // updateDots는 activeIdx 이전 dot을 전부 'done'으로 덮어쓰므로, 녹화 중
+    // 표시(rec)는 updateDots 이후에 다시 지정해야 화면에 남는다.
+    document.getElementById('kfd'+(kfIdx-1)).className = 'kf-dot rec';
 
     updateMatchIndicator('playing', '▶ 영상 재생 중...');
     setS('playing', '영상을 보면서 다음 자세를 준비하세요');
@@ -529,10 +568,6 @@ function beginNextTransition(){
     const toKf = keyframes[kfIdx];
 
     if(fromKf.clip.clip_id === toKf.clip.clip_id){
-        // Continuous playback shows the raw <video> element itself (not a
-        // canvas snapshot), so mirroring here needs a CSS transform on rv --
-        // extractVideoFrame's canvas-level flip only applies once we snap
-        // back to a still frame below.
         rv.style.transform = toKf.mirror ? 'scaleX(-1)' : 'none';
         rv.style.display = 'block'; rc.style.display = 'none';
         videoPlaying = true;
@@ -541,9 +576,10 @@ function beginNextTransition(){
         const stopTime = toKf.time;
         const checkLoop = () => {
             if(rv.currentTime >= stopTime - 0.05){
+                // 영상을 멈추고 그 프레임을 그대로 목표 자세로 보여준다 (캔버스
+                // 스냅샷 없음). 사용자는 재생 중에도 실시간으로 따라하므로
+                // 녹화(recStart/curSegFrames)는 전환 시작 시점부터 계속 이어진다.
                 rv.pause();
-                rv.style.display = 'none'; rc.style.display = 'block';
-                extractVideoFrame(rv,rc,rctx,toKf.mirror);
                 videoPlaying = false;
                 updateMatchIndicator('recording', '자세를 맞춰주세요');
                 setS('recording', '영상이 멈췄습니다. 자세를 따라하세요');
@@ -579,6 +615,9 @@ function onTransitionMatched(){
 
 // ===== HANDEDNESS AUTO-DETECTION (spec §7.2 step 3, replaces manual 왼손/오른손 buttons) =====
 function handleHandednessSample(rawLabel, rawScore){
+    // commit 후 genSequence(비동기 fetch)가 끝날 때까지 phase가 'detecting_hand'로
+    // 남아 있어, 가드가 없으면 버퍼가 다시 차서 genSequence가 중복 실행된다.
+    if(selectedHand) return;
     if(!rawLabel) return;
     const trueSide = HANDEDNESS_SWAP[rawLabel];
     if(!trueSide) return;
@@ -599,16 +638,17 @@ function handleHandednessSample(rawLabel, rawScore){
 
 // ===== LIVE GHOST FALLBACK while waiting for the target pose =====
 function maybeShowGhostFallback(){
-    if(phase !== 'matching') return;
+    if(phase !== 'matching' || !keyframes[kfIdx]) return;
     if(handLostSince === null) handLostSince = performance.now();
     if(!ghostFallbackActive && performance.now() - handLostSince > GHOST_FALLBACK_DELAY_MS){
         ghostFallbackActive = true;
         fading = true;
-        rc.classList.add('fading');
+        rv.classList.add('fading'); rc.classList.add('fading');
         setTimeout(() => {
             const kf = keyframes[kfIdx];
+            rv.style.display = 'none'; rc.style.display = 'block';
             playGhostLoop(kf.allBaseLm, kf.width, kf.height, {fps: kf.fps});
-            rc.classList.remove('fading');
+            rv.classList.remove('fading'); rc.classList.remove('fading');
             setTimeout(() => { fading = false; }, 500);
         }, 500);
     }
@@ -618,11 +658,11 @@ function maybeHideGhostFallback(){
     if(!ghostFallbackActive) return;
     ghostFallbackActive = false;
     fading = true;
-    rc.classList.add('fading');
+    rv.classList.add('fading'); rc.classList.add('fading');
     setTimeout(() => {
         stopGhostLoop();
         if(phase === 'matching') showKeyframeImage(kfIdx);
-        rc.classList.remove('fading');
+        rv.classList.remove('fading'); rc.classList.remove('fading');
         setTimeout(() => { fading = false; }, 500);
     }, 500);
 }
@@ -663,8 +703,12 @@ function onRes(r){
     // Framing-guide overlay is drawn here (same mirrored transform as the
     // camera image, before ctx.restore()) so it visually mirrors together
     // with the live feed on front cameras -- see drawFramingGuideOverlay().
-    // Only relevant while still lining up for the very first keyframe.
-    if(phase === 'matching' && kfIdx === 0) drawFramingGuideOverlay(performance.now());
+    // kfIdx가 0을 지나도(가이드 통과 전에 첫 자세가 먼저 매칭된 경우) 즉시
+    // 끊지 않고, 잠시 기다렸다가 페이드아웃이 끝날 때까지 계속 그린다.
+    if(!framingOverlayDone && (phase === 'matching' || phase === 'recording')){
+        if(kfIdx > 0 && framingFadeStart === null) framingFadeStart = performance.now() + FRAMING_DISMISS_WAIT_MS;
+        drawFramingGuideOverlay(performance.now());
+    }
     ctx.restore();
     // 보안 원칙(§7.4): 사용자 손 스켈레톤을 카메라 화면에 실시간으로 오버레이하지 않는다 —
     // 세분화된 근접도 신호는 탐색 기반 공격의 오라클이 될 수 있다. (프레이밍 가이드는
@@ -684,6 +728,7 @@ function onRes(r){
 
     if(!has){
         lastLm = null;
+        matchHoldStart = null;
         sessionLog.push({t: nowT, phase, detected: false, lm: null});
         if(phase === 'recording') curSegFrames.push({t: performance.now()-recStart, lm: null});
         maybeShowGhostFallback();
@@ -713,9 +758,14 @@ function onRes(r){
         const uPP = ppSingle(userLm), tPP = ppSingle(targetLm);
         const err = angleErr(uPP, tPP);
         if(err < MATCH_ANGLE_THRESH){
+            if(matchHoldStart === null) matchHoldStart = performance.now();
             updateMatchIndicator('matched', '자세가 맞습니다');
-            onFirstKeyframeMatched();
+            if(performance.now() - matchHoldStart >= MATCH_HOLD_MS){
+                matchHoldStart = null;
+                onFirstKeyframeMatched();
+            }
         } else {
+            matchHoldStart = null;
             updateMatchIndicator('waiting', '자세를 맞춰주세요');
         }
     }
@@ -730,8 +780,14 @@ function onRes(r){
             const uPP = ppSingle(userLm), tPP = ppSingle(targetLm);
             const err = angleErr(uPP, tPP);
             if(err < MATCH_ANGLE_THRESH){
+                if(matchHoldStart === null) matchHoldStart = performance.now();
                 updateMatchIndicator('matched', '자세가 맞습니다');
-                onTransitionMatched();
+                if(performance.now() - matchHoldStart >= MATCH_HOLD_MS){
+                    matchHoldStart = null;
+                    onTransitionMatched();
+                }
+            } else {
+                matchHoldStart = null;
             }
         }
     }
