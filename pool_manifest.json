@@ -2,30 +2,6 @@
   "w3_new": null,
   "clips": [
     {
-      "clip_id": "l1",
-      "handedness": "Left",
-      "video_file": "l1_level3_DIP.mp4",
-      "landmarks_file": "l1_landmarks.json",
-      "n_frames": 113,
-      "fps": 24.0
-    },
-    {
-      "clip_id": "l2",
-      "handedness": "Left",
-      "video_file": "l2_level3_DIP.mp4",
-      "landmarks_file": "l2_landmarks.json",
-      "n_frames": 117,
-      "fps": 24.0
-    },
-    {
-      "clip_id": "l3",
-      "handedness": "Left",
-      "video_file": "l3_level3_DIP.mp4",
-      "landmarks_file": "l3_landmarks.json",
-      "n_frames": 164,
-      "fps": 24.0
-    },
-    {
       "clip_id": "custom01",
       "label": "접기",
       "handedness": "Right",
