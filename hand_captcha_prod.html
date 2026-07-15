@@ -109,8 +109,11 @@
 </div>
 
 <script>
-const VIDEO_BASE = 'https://mukgore.github.io/handcaptcha/';
-const ACTIONS_L = ['l1','l2','l3'], ACTIONS_R = ['r1','r2','r3'];
+// Site root the challenge pool is hosted from. Every pool_manifest.json entry
+// stores its video_file/landmarks_file relative to this same root (see
+// dataset_pipeline/export_pool.py and migrate_legacy_actions.py) -- pointing
+// this at a CDN/bucket instead of GitHub Pages is a pure config change.
+const POOL_BASE = 'https://mukgore.github.io/handcaptcha/';
 const MATCH_ANGLE_THRESH = 38;
 const THRESHOLD = 0.25;
 const W2 = {da:0.38, ac:0.37, a:0.25};
@@ -135,8 +138,9 @@ const GHOST_FALLBACK_DELAY_MS = 300;
 let selectedHand = null;
 let pid = 'user_' + Date.now().toString().slice(-4);
 let targetLm = null;
-let hands = null, camStream = null, animId = null, lastLm = null, baseData = null;
-let keyframes = [], kfIdx = 0, tutorialAction = null;
+let hands = null, camStream = null, animId = null, lastLm = null;
+let poolManifest = null, landmarksCache = {};
+let keyframes = [], kfIdx = 0, tutorialClip = null;
 // phase: 'idle' | 'detecting_hand' | 'tutorial' | 'matching' | 'recording' | 'done'
 let phase = 'idle';
 let recStart = 0, segments = [], curSegFrames = [];
@@ -147,6 +151,12 @@ let handednessBuffer = [];
 let handLostSince = null, ghostFallbackActive = false;
 let ghostAnimId = null, ghostPlaying = false;
 
+// Full-session raw landmark trace, independent of segments/curSegFrames
+// (which only cover "recording" transitions) -- covers every onRes() call
+// from handedness detection through completion, so the matching-wait
+// periods aren't lost. Included in the downloaded result JSON.
+let sessionLog = [], sessionStart = 0;
+
 const rv = document.getElementById('refVideo');
 const rc = document.getElementById('refCanvas');
 const rctx = rc.getContext('2d');
@@ -154,25 +164,39 @@ const cv = document.getElementById('cameraVideo');
 const cc = document.getElementById('cameraCanvas');
 const ctx = cc.getContext('2d');
 
-// ===== DATA LOADING =====
-async function loadBase(){
-    try{ const r = await fetch(VIDEO_BASE+'landmarks_base.json'); baseData = await r.json(); }
-    catch(e){ try{ const r = await fetch('landmarks_base.json'); baseData = await r.json(); }catch(e2){} }
+// ===== DATA LOADING (manifest-driven challenge pool, spec §0 "챌린지 풀 확장") =====
+// pool_manifest.json only lists clip metadata (clip_id/handedness/paths) --
+// each clip's own (potentially large) landmark JSON is fetched lazily, only
+// for the handful of clips actually drawn for a session, so this scales to
+// however many thousand clips the pool grows to without a large upfront load.
+async function loadPoolManifest(){
+    try{ const r = await fetch(POOL_BASE+'pool_manifest.json'); poolManifest = await r.json(); }
+    catch(e){ try{ const r = await fetch('pool_manifest.json'); poolManifest = await r.json(); }catch(e2){} }
 }
-function getBase(action){
-    if(!baseData) return null;
-    for(const k of Object.keys(baseData)) if(k.startsWith(action+'_baseline')){
-        const d=baseData[k], info=d.video_info||{}, w=info.width||720, h=info.height||720;
-        return d.frames.filter(f=>f.detected&&f.landmarks_px).map(f=>{ const lm=f.landmarks_px; return LN.map(n=>[lm[n].x/w, lm[n].y/h]); });
-    }
-    return null;
+async function loadClipLandmarks(clip){
+    if(landmarksCache[clip.clip_id]) return landmarksCache[clip.clip_id];
+    let d;
+    try{ const r = await fetch(POOL_BASE + clip.landmarks_file); d = await r.json(); }
+    catch(e){ const r = await fetch(clip.landmarks_file); d = await r.json(); }
+    landmarksCache[clip.clip_id] = d;
+    return d;
 }
-function getBaseInfo(action){
-    if(baseData) for(const k of Object.keys(baseData)) if(k.startsWith(action+'_baseline')){
-        const info = baseData[k].video_info || {};
-        return {width: info.width||720, height: info.height||720, fps: info.fps||24};
-    }
-    return {width:720, height:720, fps:24};
+function getBaseFromLandmarkData(d, mirror){
+    // mirror: the pool no longer keeps a separately-recorded clip per hand --
+    // each clip is recorded once (see clip.handedness) and horizontally
+    // mirrored at serve time for users of the opposite hand. Mirroring the
+    // COORDINATE DATA itself (not just what's displayed) is required so the
+    // pose-matching/scoring comparison is against the same thing the user
+    // actually sees on screen, not the original unmirrored recording.
+    const info = d.video_info||{}, w=info.width||720, h=info.height||720;
+    return d.frames.filter(f=>f.detected&&f.landmarks_px).map(f=>{
+        const lm=f.landmarks_px;
+        return LN.map(n => mirror ? [1 - lm[n].x/w, lm[n].y/h] : [lm[n].x/w, lm[n].y/h]);
+    });
+}
+function getInfoFromLandmarkData(d){
+    const info = d.video_info || {};
+    return {width: info.width||720, height: info.height||720, fps: info.fps||24};
 }
 function findKeyframes(baseLm){
     if(!baseLm||baseLm.length<10) return [0, Math.floor(baseLm.length/2), baseLm.length-1];
@@ -190,9 +214,12 @@ function findKeyframes(baseLm){
     const step=Math.floor(mins.length/3);
     return [mins[0], mins[step], mins[step*2], mins[mins.length-1]];
 }
-function extractVideoFrame(video, canvas, cctx){
+function extractVideoFrame(video, canvas, cctx, mirror){
     canvas.width=video.videoWidth||720; canvas.height=video.videoHeight||720;
+    cctx.save();
+    if(mirror){ cctx.translate(canvas.width, 0); cctx.scale(-1, 1); }
     cctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    cctx.restore();
 }
 
 // ===== POSE MATCHING =====
@@ -272,19 +299,35 @@ function stopGhostLoop(){
     ghostAnimId = null;
 }
 
-// ===== SEQUENCE (2 of the 3 actions become the real challenge; the leftover becomes the tutorial) =====
-function genSequence(){
-    const acts = selectedHand === 'left' ? ACTIONS_L : ACTIONS_R;
-    const shuffled = [...acts].sort(() => Math.random()-0.5);
-    const challengeActions = shuffled.slice(0, 2);
-    tutorialAction = shuffled[2];
+// ===== SEQUENCE (2 of 3+ pool clips become the real challenge; a held-back
+// 3rd becomes the tutorial) =====
+// Each clip is recorded once, in ONE hand (clip.handedness) -- there is no
+// separate left/right recording of the same gesture. Any clip can be shown
+// to either hand: clips of the opposite hand get mirrored (video display AND
+// landmark data, see getBaseFromLandmarkData) rather than being excluded.
+async function genSequence(){
+    const handLabel = selectedHand === 'left' ? 'Left' : 'Right';
+    const candidates = poolManifest && poolManifest.clips || [];
+    if(candidates.length < 3){
+        console.error(`Pool has only ${candidates.length} clips total (need >= 3)`);
+    }
+    const shuffled = [...candidates].sort(() => Math.random()-0.5);
+    const challengeClips = shuffled.slice(0, 2);
+    // shuffled[0] fallback only fires in the degenerate <3-candidates case
+    // logged above -- it does reuse a challenge clip as the tutorial then,
+    // which is an accepted tradeoff for that error condition, not normal
+    // operation (the pool is expected to comfortably exceed 3 clips).
+    tutorialClip = shuffled[2] || shuffled[0];
 
     keyframes = [];
-    for(const action of challengeActions){
-        const baseLm = getBase(action);
-        if(!baseLm) continue;
+    for(const clip of challengeClips){
+        const mirror = clip.handedness !== handLabel;
+        const d = await loadClipLandmarks(clip);
+        const baseLm = getBaseFromLandmarkData(d, mirror);
+        if(!baseLm || baseLm.length === 0) continue;
+        const info = getInfoFromLandmarkData(d);
         const kfIdxs = findKeyframes(baseLm);
-        for(const fi of kfIdxs) keyframes.push({action, frameIdx:fi, time:fi/24, baseLm:baseLm[fi], allBaseLm:baseLm});
+        for(const fi of kfIdxs) keyframes.push({clip, mirror, frameIdx:fi, time:fi/info.fps, baseLm:baseLm[fi], allBaseLm:baseLm, fps:info.fps, width:info.width, height:info.height});
     }
     const prog = document.getElementById('kfProgress');
     prog.innerHTML = keyframes.map((_,i)=>{
@@ -293,10 +336,14 @@ function genSequence(){
     }).join('');
 }
 
-function playGhostTutorial(){
+async function playGhostTutorial(){
     phase = 'tutorial';
-    const baseLm = getBase(tutorialAction);
-    const info = getBaseInfo(tutorialAction);
+    if(!tutorialClip){ startRealChallenge(); return; }
+    const handLabel = selectedHand === 'left' ? 'Left' : 'Right';
+    const mirror = tutorialClip.handedness !== handLabel;
+    const d = await loadClipLandmarks(tutorialClip);
+    const baseLm = getBaseFromLandmarkData(d, mirror);
+    const info = getInfoFromLandmarkData(d);
     rv.style.display = 'none'; rc.style.display = 'block';
     document.getElementById('kfLabel').textContent = '준비 중';
     document.getElementById('kfInfo').textContent = '예시 동작 (튜토리얼)';
@@ -321,13 +368,14 @@ function showKeyframeImage(idx){
     const kf = keyframes[idx];
     targetLm = kf.baseLm;
     document.getElementById('kfLabel').textContent = `자세 ${idx+1}/${keyframes.length}`;
-    document.getElementById('kfInfo').textContent = `${kf.action.toUpperCase()} #${kf.frameIdx}`;
+    document.getElementById('kfInfo').textContent = `${kf.clip.clip_id} #${kf.frameIdx}`;
 
+    rv.style.transform = 'none'; // canvas-level mirror below handles this snapshot; rv itself stays hidden
     rv.style.display = 'none'; rc.style.display = 'block';
-    rv.src = VIDEO_BASE + kf.action + '_level3_DIP.mp4';
+    rv.src = POOL_BASE + kf.clip.video_file;
     rv.load();
     rv.oncanplay = () => { rv.currentTime = kf.time; };
-    rv.onseeked = () => { extractVideoFrame(rv,rc,rctx); rv.oncanplay=null; rv.onseeked=null; };
+    rv.onseeked = () => { extractVideoFrame(rv,rc,rctx,kf.mirror); rv.oncanplay=null; rv.onseeked=null; };
 
     updateDots(idx);
 }
@@ -359,7 +407,7 @@ function beginNextTransition(){
 
     targetLm = keyframes[kfIdx].baseLm;
     document.getElementById('kfLabel').textContent = `자세 ${kfIdx+1}/${keyframes.length}`;
-    document.getElementById('kfInfo').textContent = `${keyframes[kfIdx].action.toUpperCase()} #${keyframes[kfIdx].frameIdx}`;
+    document.getElementById('kfInfo').textContent = `${keyframes[kfIdx].clip.clip_id} #${keyframes[kfIdx].frameIdx}`;
     updateDots(kfIdx);
 
     updateMatchIndicator('playing', '▶ 영상 재생 중...');
@@ -368,7 +416,12 @@ function beginNextTransition(){
     const fromKf = keyframes[kfIdx-1];
     const toKf = keyframes[kfIdx];
 
-    if(fromKf.action === toKf.action){
+    if(fromKf.clip.clip_id === toKf.clip.clip_id){
+        // Continuous playback shows the raw <video> element itself (not a
+        // canvas snapshot), so mirroring here needs a CSS transform on rv --
+        // extractVideoFrame's canvas-level flip only applies once we snap
+        // back to a still frame below.
+        rv.style.transform = toKf.mirror ? 'scaleX(-1)' : 'none';
         rv.style.display = 'block'; rc.style.display = 'none';
         videoPlaying = true;
         rv.currentTime = fromKf.time;
@@ -378,7 +431,7 @@ function beginNextTransition(){
             if(rv.currentTime >= stopTime - 0.05){
                 rv.pause();
                 rv.style.display = 'none'; rc.style.display = 'block';
-                extractVideoFrame(rv,rc,rctx);
+                extractVideoFrame(rv,rc,rctx,toKf.mirror);
                 videoPlaying = false;
                 updateMatchIndicator('recording', '자세를 맞춰주세요');
                 setS('recording', '영상이 멈췄습니다. 자세를 따라하세요');
@@ -395,7 +448,7 @@ function beginNextTransition(){
 function onTransitionMatched(){
     segments.push({
         fromKf: kfIdx-1, toKf: kfIdx,
-        fromAction: keyframes[kfIdx-1].action, toAction: keyframes[kfIdx].action,
+        fromClip: keyframes[kfIdx-1].clip.clip_id, toClip: keyframes[kfIdx].clip.clip_id,
         frames: curSegFrames.slice(),
         duration: curSegFrames.length>0 ? curSegFrames[curSegFrames.length-1].t : 0
     });
@@ -426,8 +479,7 @@ function handleHandednessSample(rawLabel, rawScore){
         if(allSame && avgScore > HANDEDNESS_MIN_SCORE){
             selectedHand = handednessBuffer[0].side;
             handednessBuffer = [];
-            genSequence();
-            playGhostTutorial();
+            genSequence().then(playGhostTutorial);
         }
         // else: buffer keeps rolling via shift() above — no numeric/retry feedback shown (§7.4)
     }
@@ -443,8 +495,7 @@ function maybeShowGhostFallback(){
         rc.classList.add('fading');
         setTimeout(() => {
             const kf = keyframes[kfIdx];
-            const info = getBaseInfo(kf.action);
-            playGhostLoop(kf.allBaseLm, info.width, info.height, {fps: info.fps});
+            playGhostLoop(kf.allBaseLm, kf.width, kf.height, {fps: kf.fps});
             rc.classList.remove('fading');
             setTimeout(() => { fading = false; }, 500);
         }, 500);
@@ -488,6 +539,7 @@ function onRes(r){
     const videoTrack = camStream ? camStream.getVideoTracks()[0] : null;
     const settings = videoTrack ? videoTrack.getSettings() : {};
     const isFront = settings.facingMode === 'user' || (videoTrack && videoTrack.label.toLowerCase().includes('front'));
+    const getX = (val) => isFront ? 1 - val : val;
 
     ctx.save();
     ctx.clearRect(0, 0, cc.width, cc.height);
@@ -497,9 +549,11 @@ function onRes(r){
     // 보안 원칙(§7.4): 사용자 손 스켈레톤을 카메라 화면에 실시간으로 오버레이하지 않는다 —
     // 세분화된 근접도 신호는 탐색 기반 공격의 오라클이 될 수 있다.
 
+    const nowT = performance.now() - sessionStart;
     const has = r.multiHandLandmarks && r.multiHandLandmarks.length > 0;
     if(!has){
         lastLm = null;
+        sessionLog.push({t: nowT, phase, detected: false, lm: null});
         if(phase === 'recording') curSegFrames.push({t: performance.now()-recStart, lm: null});
         maybeShowGhostFallback();
         return;
@@ -508,8 +562,14 @@ function onRes(r){
 
     const lm = r.multiHandLandmarks[0];
     lastLm = lm;
+    // Logged post-getX (display/scoring convention) for every phase, including
+    // detecting_hand, so the session trace uses one consistent coordinate
+    // space throughout -- this is separate from the raw pre-mirror label read
+    // used for handedness classification just below.
+    const rawLm = lm.map(l => [getX(l.x), l.y, l.z]);
+    sessionLog.push({t: nowT, phase, detected: true, lm: rawLm});
 
-    // 손 판별(handedness)은 반전 이전, 원본 센서 프레임 기준 라벨을 그대로 읽는다 (아래 getX는
+    // 손 판별(handedness)은 반전 이전, 원본 센서 프레임 기준 라벨을 그대로 읽는다 (위 getX는
     // 표시/좌표용 반전일 뿐, handedness 판정 자체에는 관여하지 않음).
     if(phase === 'detecting_hand'){
         const h = r.multiHandedness && r.multiHandedness[0];
@@ -517,8 +577,7 @@ function onRes(r){
         return;
     }
 
-    const getX = (val) => isFront ? 1 - val : val;
-    const userLm = lm.map(l => [getX(l.x), l.y]);
+    const userLm = rawLm;
 
     if(phase === 'matching' && kfIdx < keyframes.length && targetLm){
         const uPP = ppSingle(userLm), tPP = ppSingle(targetLm);
@@ -566,7 +625,7 @@ function computeScores(){
         if(det.length<3) continue;
         const fromKf=keyframes[seg.fromKf], toKf=keyframes[seg.toKf];
         let baseSeg;
-        if(fromKf.action===toKf.action) baseSeg=fromKf.allBaseLm.slice(fromKf.frameIdx, toKf.frameIdx+1);
+        if(fromKf.clip.clip_id===toKf.clip.clip_id) baseSeg=fromKf.allBaseLm.slice(fromKf.frameIdx, toKf.frameIdx+1);
         else baseSeg=[...fromKf.allBaseLm.slice(fromKf.frameIdx), ...toKf.allBaseLm.slice(0,toKf.frameIdx+1)];
         allUserLm.push(...det); allBaseLm.push(...baseSeg);
     }
@@ -601,12 +660,12 @@ function showResult(){
     if(camStream) camStream.getTracks().forEach(t => t.stop());
 
     const result = {
-        experimentInfo: {participantId: pid, selectedHand, timestamp: Date.now(), version: 'prod_v1_ghost'},
-        keyframes: keyframes.map(kf => ({action: kf.action, frameIdx: kf.frameIdx})),
-        tutorialAction,
+        experimentInfo: {participantId: pid, selectedHand, timestamp: Date.now(), version: 'prod_v2_pool'},
+        keyframes: keyframes.map(kf => ({clip: kf.clip.clip_id, frameIdx: kf.frameIdx})),
+        tutorialClip: tutorialClip ? tutorialClip.clip_id : null,
         segments: segments.map(seg => ({
             fromKf: seg.fromKf, toKf: seg.toKf,
-            fromAction: seg.fromAction, toAction: seg.toAction,
+            fromClip: seg.fromClip, toClip: seg.toClip,
             totalFrames: seg.frames.length,
             detectedFrames: seg.frames.filter(f => f.lm !== null).length,
             duration: seg.duration,
@@ -618,7 +677,10 @@ function showResult(){
             estimated: {angle: s.sA, dtw_angle: s.sDA, accel: s.sAc},
             captcha: s.captcha, threshold: THRESHOLD, passed: s.captcha >= THRESHOLD,
             weights: W2
-        }
+        },
+        // 전체 세션의 원시 손 랜드마크 궤적 (detecting_hand부터 완료까지 전 구간,
+        // segments/curSegFrames가 다루지 않는 매칭 대기 구간도 포함).
+        sessionLog
     };
 
     const blob = new Blob([JSON.stringify(result, null, 2)], {type: 'application/json'});
@@ -648,8 +710,10 @@ function showResult(){
 // ===== BOOTSTRAP (spec §7.2 step 1: 진입 → 카메라 자동 실행, 선택 단계 없음) =====
 async function bootstrap(){
     await initMP();
-    await loadBase();
+    await loadPoolManifest();
     phase = 'detecting_hand';
+    sessionStart = performance.now();
+    sessionLog = [];
     updateMatchIndicator('waiting', '손을 비춰주세요');
     setS('waiting', '손을 비춰주세요');
     await initCam();

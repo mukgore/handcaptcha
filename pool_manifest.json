@@ -1,0 +1,101 @@
+{
+  "w3_new": null,
+  "clips": [
+    {
+      "clip_id": "l1",
+      "handedness": "Left",
+      "video_file": "l1_level3_DIP.mp4",
+      "landmarks_file": "l1_landmarks.json",
+      "n_frames": 113,
+      "fps": 24.0
+    },
+    {
+      "clip_id": "l2",
+      "handedness": "Left",
+      "video_file": "l2_level3_DIP.mp4",
+      "landmarks_file": "l2_landmarks.json",
+      "n_frames": 117,
+      "fps": 24.0
+    },
+    {
+      "clip_id": "l3",
+      "handedness": "Left",
+      "video_file": "l3_level3_DIP.mp4",
+      "landmarks_file": "l3_landmarks.json",
+      "n_frames": 164,
+      "fps": 24.0
+    },
+    {
+      "clip_id": "custom01",
+      "label": "접기",
+      "handedness": "Right",
+      "video_file": "custom01.mp4",
+      "landmarks_file": "custom01_landmarks.json",
+      "n_frames": 119,
+      "fps": 30.00075632158794
+    },
+    {
+      "clip_id": "custom02",
+      "label": "펴기",
+      "handedness": "Right",
+      "video_file": "custom02.mp4",
+      "landmarks_file": "custom02_landmarks.json",
+      "n_frames": 119,
+      "fps": 30.00075632158794
+    },
+    {
+      "clip_id": "custom03",
+      "label": "엄지와검지",
+      "handedness": "Right",
+      "video_file": "custom03.mp4",
+      "landmarks_file": "custom03_landmarks.json",
+      "n_frames": 108,
+      "fps": 30.000740759031086
+    },
+    {
+      "clip_id": "custom04",
+      "label": "엄지와중지",
+      "handedness": "Right",
+      "video_file": "custom04.mp4",
+      "landmarks_file": "custom04_landmarks.json",
+      "n_frames": 113,
+      "fps": 30.000707981309294
+    },
+    {
+      "clip_id": "custom05",
+      "label": "엄지와약지",
+      "handedness": "Right",
+      "video_file": "custom05.mp4",
+      "landmarks_file": "custom05_landmarks.json",
+      "n_frames": 116,
+      "fps": 30.00077588213488
+    },
+    {
+      "clip_id": "custom06",
+      "label": "탁탁접기",
+      "handedness": "Right",
+      "video_file": "custom06.mp4",
+      "landmarks_file": "custom06_landmarks.json",
+      "n_frames": 110,
+      "fps": 30.00545553737043
+    },
+    {
+      "clip_id": "custom07",
+      "label": "엄지와소지",
+      "handedness": "Right",
+      "video_file": "custom07.mp4",
+      "landmarks_file": "custom07_landmarks.json",
+      "n_frames": 106,
+      "fps": 30.0007547359682
+    },
+    {
+      "clip_id": "custom08",
+      "label": "엄지검지옆붙이기",
+      "handedness": "Right",
+      "video_file": "custom08.mp4",
+      "landmarks_file": "custom08_landmarks.json",
+      "n_frames": 111,
+      "fps": 30.000810832725207
+    }
+  ]
+}
