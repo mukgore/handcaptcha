@@ -135,13 +135,43 @@ const GHOST_WIDTH_FRAC = 0.15;
 const GHOST_FINGERS = [[0,1,2,3,4],[0,5,6,7,8],[0,9,10,11,12],[0,13,14,15,16],[0,17,18,19,20]];
 const GHOST_FALLBACK_DELAY_MS = 300;
 
+// ===== FRAMING GUIDE (onboardinguxspec.md) =====
+// A synthetic, generic open-hand pose -- NOT one of the target gesture clips --
+// used purely to show the user where/how to hold their hand before any real
+// challenge pose is revealed. Order matches LN (WRIST..PINKY_TIP), normalized
+// [0,1] image coordinates.
+const FRAMING_GUIDE_POSE = [
+    [0.50,0.82], [0.40,0.78],[0.34,0.68],[0.30,0.58],[0.27,0.50],
+    [0.42,0.55],[0.40,0.40],[0.39,0.30],[0.38,0.20],
+    [0.50,0.52],[0.50,0.35],[0.50,0.23],[0.50,0.12],
+    [0.58,0.55],[0.59,0.39],[0.60,0.28],[0.61,0.18],
+    [0.65,0.60],[0.67,0.47],[0.69,0.38],[0.71,0.30]
+];
+const FRAMING_GUIDE_FILL = 'rgba(100,116,139,0.55)'; // slate, distinct from the blue matching-fallback ghost
+const FRAMING_WIGGLE_AMP = 0.012;
+const FRAMING_EDGE_MARGIN = 0.02;
+// Reuses "방안 A"'s existing hand-angle threshold -- NOT the full CAPTCHA
+// scoring formula (DTW-joint x0.38 + Accel x0.37 + joint-angle x0.25), which
+// is tuned for whole-trajectory security scoring and is too heavy/strict for
+// a static, low-speed framing check (see onboardinguxspec.md §3).
+const FRAMING_ANGLE_THRESH = MATCH_ANGLE_THRESH;
+const FRAMING_PASS_HOLD_MS = 400;
+const FRAMING_TIMEOUT_MS = 6000;
+const FRAMING_FADE_MS = 400;
+const FRAMING_DEFAULT_MSG = '카메라 프레임 안에 손을 맞춰주세요';
+const FRAMING_MESSAGES = {
+    no_hand: '손이 보이지 않아요. 카메라 쪽으로 손을 조금 더 가까이 대주세요.',
+    partial: '손 전체가 안 보여요. 카메라에서 조금 더 뒤로 물러나주세요.',
+    angle_mismatch: '손은 보이는데 아직 맞지 않아요. 손바닥이 카메라를 향하도록 각도를 조금만 조정해주세요.'
+};
+
 let selectedHand = null;
 let pid = 'user_' + Date.now().toString().slice(-4);
 let targetLm = null;
 let hands = null, camStream = null, animId = null, lastLm = null;
 let poolManifest = null, landmarksCache = {};
-let keyframes = [], kfIdx = 0, tutorialClip = null;
-// phase: 'idle' | 'detecting_hand' | 'tutorial' | 'matching' | 'recording' | 'done'
+let keyframes = [], kfIdx = 0;
+// phase: 'idle' | 'detecting_hand' | 'framing' | 'matching' | 'recording' | 'done'
 let phase = 'idle';
 let recStart = 0, segments = [], curSegFrames = [];
 let videoPlaying = false;
@@ -150,6 +180,9 @@ let fading = false;
 let handednessBuffer = [];
 let handLostSince = null, ghostFallbackActive = false;
 let ghostAnimId = null, ghostPlaying = false;
+
+let framingState = null, framingStateSince = 0, framingTimeoutMsgShown = false;
+let framingFadeStart = null, framingGuideStartTime = 0;
 
 // Full-session raw landmark trace, independent of segments/curSegFrames
 // (which only cover "recording" transitions) -- covers every onRes() call
@@ -243,13 +276,19 @@ function unitPerp(a, b){
     const dx=b[0]-a[0], dy=b[1]-a[1], len=Math.hypot(dx,dy)||1e-6;
     return [-dy/len, dx/len];
 }
-function drawGhostSilhouette(landmarksPx, cctx, w, h){
+function drawGhostSilhouette(landmarksPx, cctx, w, h, opts){
+    opts = opts || {};
     const wrist = landmarksPx[0], midMcp = landmarksPx[9];
     const scale = Math.hypot(midMcp[0]-wrist[0], midMcp[1]-wrist[1]) || 1;
     const halfW = scale * GHOST_WIDTH_FRAC;
 
-    cctx.clearRect(0,0,w,h);
-    cctx.fillStyle = GHOST_FILL;
+    // skipClear/alphaScale/fillStyle let this same renderer be composited on
+    // top of an already-drawn camera frame (framing-guide overlay) instead of
+    // only ever owning its own canvas (the tutorial/fallback ghost use case).
+    if(!opts.skipClear) cctx.clearRect(0,0,w,h);
+    cctx.save();
+    if(opts.alphaScale !== undefined) cctx.globalAlpha = opts.alphaScale;
+    cctx.fillStyle = opts.fillStyle || GHOST_FILL;
     cctx.beginPath();
     for(const chain of GHOST_FINGERS){
         const pts = chain.map(i => landmarksPx[i]);
@@ -269,6 +308,7 @@ function drawGhostSilhouette(landmarksPx, cctx, w, h){
         cctx.lineTo(path[0][0], path[0][1]);
     }
     cctx.fill();
+    cctx.restore();
 }
 function playGhostLoop(frames, w, h, opts){
     opts = opts || {};
@@ -299,8 +339,9 @@ function stopGhostLoop(){
     ghostAnimId = null;
 }
 
-// ===== SEQUENCE (2 of 3+ pool clips become the real challenge; a held-back
-// 3rd becomes the tutorial) =====
+// ===== SEQUENCE (2 pool clips become the real challenge; no held-back
+// tutorial clip -- onboarding now uses a synthetic framing guide instead of a
+// real held-back gesture, see FRAMING_GUIDE_POSE / startFramingGuide) =====
 // Each clip is recorded once, in ONE hand (clip.handedness) -- there is no
 // separate left/right recording of the same gesture. Any clip can be shown
 // to either hand: clips of the opposite hand get mirrored (video display AND
@@ -308,16 +349,11 @@ function stopGhostLoop(){
 async function genSequence(){
     const handLabel = selectedHand === 'left' ? 'Left' : 'Right';
     const candidates = poolManifest && poolManifest.clips || [];
-    if(candidates.length < 3){
-        console.error(`Pool has only ${candidates.length} clips total (need >= 3)`);
+    if(candidates.length < 2){
+        console.error(`Pool has only ${candidates.length} clips total (need >= 2)`);
     }
     const shuffled = [...candidates].sort(() => Math.random()-0.5);
     const challengeClips = shuffled.slice(0, 2);
-    // shuffled[0] fallback only fires in the degenerate <3-candidates case
-    // logged above -- it does reuse a challenge clip as the tutorial then,
-    // which is an accepted tradeoff for that error condition, not normal
-    // operation (the pool is expected to comfortably exceed 3 clips).
-    tutorialClip = shuffled[2] || shuffled[0];
 
     keyframes = [];
     for(const clip of challengeClips){
@@ -336,20 +372,104 @@ async function genSequence(){
     }).join('');
 }
 
-async function playGhostTutorial(){
-    phase = 'tutorial';
-    if(!tutorialClip){ startRealChallenge(); return; }
-    const handLabel = selectedHand === 'left' ? 'Left' : 'Right';
-    const mirror = tutorialClip.handedness !== handLabel;
-    const d = await loadClipLandmarks(tutorialClip);
-    const baseLm = getBaseFromLandmarkData(d, mirror);
-    const info = getInfoFromLandmarkData(d);
+// ===== FRAMING GUIDE (onboardinguxspec.md §2 Step 0-2) =====
+// Replaces the old held-back-clip ghost tutorial. Shown on the CAMERA panel
+// (not the reference panel) immediately after handedness is committed, to
+// teach hand placement/angle -- never a target gesture -- before the real
+// challenge starts.
+function framingGuideFrame(tMs){
+    const t = tMs / 1000;
+    return FRAMING_GUIDE_POSE.map((p, i) => {
+        if(i === 0) return p; // wrist anchor stays fixed
+        const phaseOff = i * 0.7;
+        const dx = Math.sin(t*1.3 + phaseOff) * FRAMING_WIGGLE_AMP;
+        const dy = Math.cos(t*1.1 + phaseOff) * FRAMING_WIGGLE_AMP * 0.5;
+        return [p[0]+dx, p[1]+dy];
+    });
+}
+
+// Priority-ordered classification (onboardinguxspec.md §2 Step 1): a lower-
+// numbered condition must never be masked by a higher-numbered one passing
+// first. lm: array of [x,y,z] in normalized [0,1] image coordinates (or null
+// when !has). bbox-vs-frame-edge uses a direct geometric compare, not model
+// confidence, since MediaPipe can hallucinate a plausible high-confidence
+// position for a hand that is actually clipped by the frame edge.
+function evaluateFramingState(lm, has){
+    if(!has || !lm) return 'no_hand';
+    let minX=1, maxX=0, minY=1, maxY=0;
+    for(const p of lm){
+        if(p[0]<minX) minX=p[0]; if(p[0]>maxX) maxX=p[0];
+        if(p[1]<minY) minY=p[1]; if(p[1]>maxY) maxY=p[1];
+    }
+    if(minX<=FRAMING_EDGE_MARGIN || maxX>=1-FRAMING_EDGE_MARGIN || minY<=FRAMING_EDGE_MARGIN || maxY>=1-FRAMING_EDGE_MARGIN){
+        return 'partial';
+    }
+    // Reuses "방안 A"'s angle-comparison (ppSingle/angleErr), NOT the CAPTCHA
+    // scoring formula -- see FRAMING_ANGLE_THRESH comment above.
+    const err = angleErr(ppSingle(lm), ppSingle(FRAMING_GUIDE_POSE));
+    if(err >= FRAMING_ANGLE_THRESH) return 'angle_mismatch';
+    return 'pass';
+}
+
+function startFramingGuide(){
+    phase = 'framing';
+    framingState = null;
+    framingStateSince = performance.now();
+    framingTimeoutMsgShown = false;
+    framingFadeStart = null;
+    framingGuideStartTime = performance.now();
     rv.style.display = 'none'; rc.style.display = 'block';
+    rctx.clearRect(0, 0, rc.width, rc.height);
     document.getElementById('kfLabel').textContent = '준비 중';
-    document.getElementById('kfInfo').textContent = '예시 동작 (튜토리얼)';
-    updateMatchIndicator('playing', '예시 동작입니다');
-    setS('playing', '고스트 손 모양을 살펴보세요');
-    playGhostLoop(baseLm, info.width, info.height, {once:true, fps:info.fps, onDone:startRealChallenge});
+    document.getElementById('kfInfo').textContent = '';
+    updateMatchIndicator('waiting', '손 위치를 맞춰주세요');
+    setS('waiting', FRAMING_DEFAULT_MSG);
+}
+
+// Called every onRes() frame while phase==='framing', regardless of whether a
+// hand is currently detected, so timeouts/state keep advancing even through
+// 'no_hand'. Hysteresis: a state must hold continuously for
+// FRAMING_PASS_HOLD_MS (pass) before triggering fade-out, filtering flicker
+// from momentary misdetections.
+function updateFramingGuide(lm, has){
+    if(phase !== 'framing' || framingFadeStart !== null) return;
+    const now = performance.now();
+    const state = evaluateFramingState(lm, has);
+    if(state !== framingState){
+        framingState = state;
+        framingStateSince = now;
+        framingTimeoutMsgShown = false;
+        if(state !== 'pass') setS('waiting', FRAMING_DEFAULT_MSG);
+    }
+    const elapsed = now - framingStateSince;
+    if(state === 'pass'){
+        if(elapsed >= FRAMING_PASS_HOLD_MS) framingFadeStart = now;
+    } else if(elapsed >= FRAMING_TIMEOUT_MS && !framingTimeoutMsgShown){
+        framingTimeoutMsgShown = true;
+        setS('waiting', FRAMING_MESSAGES[state]);
+    }
+}
+
+// Draws onto the CAMERA canvas (ctx/cc), composited on top of the already-
+// drawn camera frame -- called from onRes() while the mirror transform is
+// still active, so guide coordinates share the same raw/pre-mirror space as
+// the drawn camera image.
+function drawFramingGuideOverlay(now){
+    let alpha = 0.55;
+    if(framingFadeStart !== null){
+        const t = (now - framingFadeStart) / FRAMING_FADE_MS;
+        alpha *= Math.max(0, 1 - t);
+        if(t >= 1){ finishFramingGuide(); return; }
+    }
+    const frame = framingGuideFrame(now - framingGuideStartTime);
+    const denorm = frame.map(p => [p[0]*cc.width, p[1]*cc.height]);
+    drawGhostSilhouette(denorm, ctx, cc.width, cc.height, {alphaScale: alpha, skipClear: true, fillStyle: FRAMING_GUIDE_FILL});
+}
+
+function finishFramingGuide(){
+    framingFadeStart = null;
+    framingState = null;
+    startRealChallenge();
 }
 
 function startRealChallenge(){
@@ -360,7 +480,7 @@ function startRealChallenge(){
     showKeyframeImage(0);
     phase = 'matching';
     updateMatchIndicator('waiting', '자세를 맞춰주세요');
-    setS('waiting', '목표 자세와 같은 손 모양을 취해주세요');
+    setS('waiting', '목표 동작을 따라해주세요');
 }
 
 // ===== SHOW KEYFRAME =====
@@ -479,7 +599,7 @@ function handleHandednessSample(rawLabel, rawScore){
         if(allSame && avgScore > HANDEDNESS_MIN_SCORE){
             selectedHand = handednessBuffer[0].side;
             handednessBuffer = [];
-            genSequence().then(playGhostTutorial);
+            genSequence().then(startFramingGuide);
         }
         // else: buffer keeps rolling via shift() above — no numeric/retry feedback shown (§7.4)
     }
@@ -541,16 +661,35 @@ function onRes(r){
     const isFront = settings.facingMode === 'user' || (videoTrack && videoTrack.label.toLowerCase().includes('front'));
     const getX = (val) => isFront ? 1 - val : val;
 
+    const has = r.multiHandLandmarks && r.multiHandLandmarks.length > 0;
+    const lm = has ? r.multiHandLandmarks[0] : null;
+
     ctx.save();
     ctx.clearRect(0, 0, cc.width, cc.height);
     if(isFront){ ctx.translate(cc.width, 0); ctx.scale(-1, 1); }
     ctx.drawImage(r.image, 0, 0, cc.width, cc.height);
+    // Framing-guide overlay is drawn here (same mirrored transform as the
+    // camera image, before ctx.restore()) so it visually mirrors together
+    // with the live feed on front cameras -- see drawFramingGuideOverlay().
+    if(phase === 'framing') drawFramingGuideOverlay(performance.now());
     ctx.restore();
     // 보안 원칙(§7.4): 사용자 손 스켈레톤을 카메라 화면에 실시간으로 오버레이하지 않는다 —
-    // 세분화된 근접도 신호는 탐색 기반 공격의 오라클이 될 수 있다.
+    // 세분화된 근접도 신호는 탐색 기반 공격의 오라클이 될 수 있다. (프레이밍 가이드는
+    // 실시간 추적 결과가 아니라 고정된 합성 자세라 이 원칙에 해당하지 않음.)
 
     const nowT = performance.now() - sessionStart;
-    const has = r.multiHandLandmarks && r.multiHandLandmarks.length > 0;
+
+    // Framing-phase evaluation must run every frame regardless of `has` (a
+    // dropped-hand frame is itself the 'no_hand' state, not something to skip)
+    // -- so this branches out before the general !has early-return below.
+    if(phase === 'framing'){
+        const rawLm = has ? lm.map(l => [getX(l.x), l.y, l.z]) : null;
+        sessionLog.push({t: nowT, phase, detected: has, lm: rawLm});
+        lastLm = has ? lm : null;
+        updateFramingGuide(has ? lm.map(l => [l.x, l.y, l.z]) : null, has);
+        return;
+    }
+
     if(!has){
         lastLm = null;
         sessionLog.push({t: nowT, phase, detected: false, lm: null});
@@ -560,7 +699,6 @@ function onRes(r){
     }
     maybeHideGhostFallback();
 
-    const lm = r.multiHandLandmarks[0];
     lastLm = lm;
     // Logged post-getX (display/scoring convention) for every phase, including
     // detecting_hand, so the session trace uses one consistent coordinate
@@ -662,7 +800,6 @@ function showResult(){
     const result = {
         experimentInfo: {participantId: pid, selectedHand, timestamp: Date.now(), version: 'prod_v2_pool'},
         keyframes: keyframes.map(kf => ({clip: kf.clip.clip_id, frameIdx: kf.frameIdx})),
-        tutorialClip: tutorialClip ? tutorialClip.clip_id : null,
         segments: segments.map(seg => ({
             fromKf: seg.fromKf, toKf: seg.toKf,
             fromClip: seg.fromClip, toClip: seg.toClip,
