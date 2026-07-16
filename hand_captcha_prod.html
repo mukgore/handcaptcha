@@ -6,6 +6,7 @@
     <title>손 동작 CAPTCHA</title>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/@mediapipe/hands@0.4.1675469240/hands.js" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/@mediapipe/drawing_utils@0.3.1675466124/drawing_utils.js" crossorigin="anonymous"></script>
     <style>
         *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
         :root{--bg:#f8f9fb;--surface:#fff;--primary:#2563eb;--primary-hover:#1d4ed8;--danger:#dc2626;--success:#16a34a;--text:#1e293b;--text-secondary:#64748b;--border:#e2e8f0;--radius:12px;--shadow:0 1px 3px rgba(0,0,0,.08),0 4px 12px rgba(0,0,0,.04);--accent:#f59e0b}
@@ -124,7 +125,7 @@ const W2 = {da:0.38, ac:0.37, a:0.25};
 const MX = {angle:46.9413, dtw_angle:44.0014, accel:0.1926};
 const AT = [[0,5,6],[5,6,7],[6,7,8],[0,9,10],[9,10,11],[10,11,12],[0,13,14],[13,14,15],[14,15,16],[0,17,18],[17,18,19],[18,19,20],[0,1,2],[1,2,3],[2,3,4]];
 const LN = ['WRIST','THUMB_CMC','THUMB_MCP','THUMB_IP','THUMB_TIP','INDEX_MCP','INDEX_PIP','INDEX_DIP','INDEX_TIP','MIDDLE_MCP','MIDDLE_PIP','MIDDLE_DIP','MIDDLE_TIP','RING_MCP','RING_PIP','RING_DIP','RING_TIP','PINKY_MCP','PINKY_PIP','PINKY_DIP','PINKY_TIP'];
-const FORMS_URL = 'https://forms.gle/ji8KMSwBzbxXzTUv6';
+const FORMS_URL = 'https://forms.gle/7D6i33xrv4fkNuX99';
 
 // MediaPipe Hands labels handedness assuming the input image is already
 // selfie-mirrored. This app always sends the raw (unmirrored) camera frame
@@ -154,7 +155,7 @@ const FRAMING_GUIDE_POSE = [
     [0.58,0.55],[0.59,0.39],[0.60,0.28],[0.61,0.18],
     [0.65,0.60],[0.67,0.47],[0.69,0.38],[0.71,0.30]
 ];
-const FRAMING_GUIDE_FILL = 'rgba(100,116,139,0.55)'; // slate, distinct from the blue matching-fallback ghost
+const FRAMING_GUIDE_FILL = 'rgba(100,116,139,0.8)'; // slate, distinct from the blue matching-fallback ghost
 const FRAMING_WIGGLE_AMP = 0.012;
 const FRAMING_EDGE_MARGIN = 0.02;
 const FRAMING_PASS_HOLD_MS = 500;
@@ -469,7 +470,7 @@ function updateFramingGuide(lm, has){
 // which gesture is coming.
 function drawFramingGuideOverlay(now){
     if(framingOverlayDone) return;
-    let alpha = 0.55;
+    let alpha = 0.8;
     if(framingFadeStart !== null){
         // framingFadeStart는 미래 시각일 수 있다(대기 후 페이드) -- t<0 동안은 완전 불투명 유지
         const t = (now - framingFadeStart) / FRAMING_FADE_MS;
@@ -714,10 +715,16 @@ function onRes(r){
         drawFramingGuideOverlay(performance.now());
     }
     ctx.restore();
-    // 보안 원칙(§7.4): 사용자 손 스켈레톤을 카메라 화면에 실시간으로 오버레이하지 않는다 —
-    // 세분화된 근접도 신호는 탐색 기반 공격의 오라클이 될 수 있다. (프레이밍 가이드는
-    // 실시간 추적 결과가 아니라 실제 첫 목표 클립의 고정된 랜드마크 데이터라 이 원칙에
-    // 해당하지 않음.)
+
+    // 사용자 손 스켈레톤 오버레이: 인식 여부/위치 피드백용. 색상은 항상 고정 —
+    // 목표 자세와의 근접도에 따라 색/굵기를 바꾸지 않는다(§7.4: 세분화된 근접도
+    // 신호는 탐색 기반 공격의 오라클이 될 수 있음). 좌표는 카메라 표시와 동일한
+    // getX(미러) 공간을 쓰므로 화면 위 손과 정확히 겹친다.
+    if(has){
+        const skelLm = lm.map(l => ({x: getX(l.x), y: l.y, z: l.z}));
+        drawConnectors(ctx, skelLm, HAND_CONNECTIONS, {color:'#00FF88', lineWidth:2});
+        drawLandmarks(ctx, skelLm, {color:'#FF4444', lineWidth:1, radius:3});
+    }
 
     const nowT = performance.now() - sessionStart;
 
