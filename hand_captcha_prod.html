@@ -16,6 +16,7 @@
         .header-title{font-weight:700;font-size:16px}
         .btn{display:inline-flex;align-items:center;justify-content:center;padding:12px 32px;border-radius:10px;font-family:inherit;font-size:15px;font-weight:600;border:none;cursor:pointer;transition:all .15s;gap:8px}
         .btn:active{transform:scale(.97)}.btn-primary{background:var(--primary);color:#fff}.btn-primary:hover{background:var(--primary-hover)}.btn-lg{padding:14px 40px;font-size:16px}
+        .btn-secondary{background:#f1f5f9;color:var(--text-secondary)}.btn-secondary:hover{background:#e2e8f0}
         .screen{display:none;flex:1;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;overflow-y:auto;min-height:0}
         .screen.active{display:flex}
         .trial-container{display:none;flex:1;flex-direction:column;width:100%;min-height:0;overflow:hidden}
@@ -106,7 +107,10 @@
         <div class="score-final"><span>최종 CAPTCHA 점수</span><span id="resFinal">-</span></div>
         <div class="verdict" id="verdict"></div>
         <div class="redirect-msg" id="redirectMsg"></div>
-        <div class="btn-row"><button class="btn btn-primary" onclick="location.reload()">다시 시도</button></div>
+        <div class="btn-row">
+            <button class="btn btn-primary btn-lg" id="btnSurvey">설문 참여하기 →</button>
+            <button class="btn btn-secondary" onclick="location.reload()">다시 시도</button>
+        </div>
     </div>
 </div>
 
@@ -126,6 +130,31 @@ const MX = {angle:46.9413, dtw_angle:44.0014, accel:0.1926};
 const AT = [[0,5,6],[5,6,7],[6,7,8],[0,9,10],[9,10,11],[10,11,12],[0,13,14],[13,14,15],[14,15,16],[0,17,18],[17,18,19],[18,19,20],[0,1,2],[1,2,3],[2,3,4]];
 const LN = ['WRIST','THUMB_CMC','THUMB_MCP','THUMB_IP','THUMB_TIP','INDEX_MCP','INDEX_PIP','INDEX_DIP','INDEX_TIP','MIDDLE_MCP','MIDDLE_PIP','MIDDLE_DIP','MIDDLE_TIP','RING_MCP','RING_PIP','RING_DIP','RING_TIP','PINKY_MCP','PINKY_PIP','PINKY_DIP','PINKY_TIP'];
 const FORMS_URL = 'https://forms.gle/7D6i33xrv4fkNuX99';
+
+// ===== 결과 전송 설정 =====
+// (1) 전체 JSON 업로드용 Google Apps Script 웹앱 URL. 비워두면 업로드를 건너뛰고
+//     기존처럼 1초 카운트다운 후 설문으로 이동한다(로컬 다운로드는 항상 유지).
+//     Apps Script > 배포 > 새 배포 > 웹앱(액세스: 모든 사용자) 의 /exec URL을 넣을 것.
+const UPLOAD_URL = ''; // 예: 'https://script.google.com/macros/s/AKfy.../exec'
+// (2) 설문(Form)에 요약값을 프리필할 entry ID 매핑. 비워둔 항목은 프리필하지 않는다.
+//     주의: 프리필은 forms.gle 단축링크가 아니라 전체 viewform URL에서만 동작하므로,
+//     프리필을 쓰려면 위 FORMS_URL을
+//     'https://docs.google.com/forms/d/e/<FORM_ID>/viewform' 형태로 교체할 것.
+//     entry ID는 Form 미리보기에서 각 질문에 임시 답을 넣고 '링크 미리 채우기'로 확인.
+const FORM_ENTRY = {
+    participantId: '', // 예: 'entry.111111111'
+    hand:          '', // 예: 'entry.222222222'
+    score:         '', // 예: 'entry.333333333'
+    passed:        '', // 예: 'entry.444444444'
+    detectionRate: ''  // 예: 'entry.555555555'
+};
+// 결과 화면에서 설문으로 자동 이동하기까지의 대기(초). 업로드는 백그라운드
+// best-effort로 처리하고 사용자를 업로드 완료까지 붙잡아두지 않는다 -- 로컬
+// 다운로드가 항상 백업으로 남으므로 업로드 실패가 곧 데이터 유실은 아니다.
+// sendBeacon으로 전송이 보장됐거나 업로드를 안 쓰면 짧게, fetch 폴백으로
+// 전송 중일 때만 약간 더 준다. 어느 쪽이든 '설문 참여하기' 버튼으로 즉시 건너뛸 수 있다.
+const REDIRECT_WAIT_SEC = 1;
+const UPLOAD_REDIRECT_WAIT_SEC = 3;
 
 // MediaPipe Hands labels handedness assuming the input image is already
 // selfie-mirrored. This app always sends the raw (unmirrored) camera frame
@@ -902,18 +931,63 @@ function showResult(){
 
     showScr('screenResult');
 
-    let countdown = 5;
     const msg = document.getElementById('redirectMsg');
-    msg.textContent = `${countdown}초 후 사용성 설문으로 이동합니다...`;
+    const surveyUrl = buildSurveyUrl(s);
+    let navigated = false;
+    const goSurvey = () => { if(navigated) return; navigated = true; window.location.href = surveyUrl; };
+
+    // 업로드는 백그라운드 best-effort -- 사용자를 완료까지 기다리게 하지 않는다.
+    const beaconOk = sendResult(JSON.stringify(result));
+
+    // 버튼으로 즉시 건너뛸 수 있게 한다. sendBeacon이 아닌 fetch 폴백으로
+    // 전송 중이라면 이동 시 요청이 끊길 수 있으나, 로컬 다운로드가 백업으로
+    // 남아 있으므로 데이터 자체가 사라지지는 않는다.
+    document.getElementById('btnSurvey').onclick = goSurvey;
+
+    let countdown = (UPLOAD_URL && !beaconOk) ? UPLOAD_REDIRECT_WAIT_SEC : REDIRECT_WAIT_SEC;
+    const tick = () => {
+        msg.textContent = `${countdown}초 후 설문으로 자동 이동합니다 — 바로 이동하려면 위 버튼을 눌러주세요`;
+    };
+    tick();
     const timer = setInterval(() => {
         countdown--;
-        if(countdown <= 0){
-            clearInterval(timer);
-            window.location.href = FORMS_URL;
-        } else {
-            msg.textContent = `${countdown}초 후 사용성 설문으로 이동합니다...`;
-        }
+        if(countdown <= 0){ clearInterval(timer); goSurvey(); }
+        else tick();
     }, 1000);
+}
+
+// 결과 JSON을 서버로 전송(설정된 경우). 반환값은 "브라우저가 전송을 보장하는가".
+// sendBeacon은 페이지가 이동해도 전송이 보장되지만 페이로드가 크면(브라우저별
+// 대략 64KB) false를 반환하므로, 그때만 fetch로 폴백한다. fetch는 no-cors +
+// text/plain으로 보내 CORS preflight를 피한다(Apps Script는 e.postData.contents로
+// 원문을 그대로 받아 JSON.parse 하면 됨).
+function sendResult(payload){
+    if(!UPLOAD_URL) return false;
+    try{
+        const blob = new Blob([payload], {type: 'text/plain;charset=utf-8'});
+        if(navigator.sendBeacon && navigator.sendBeacon(UPLOAD_URL, blob)) return true;
+    }catch(e){}
+    fetch(UPLOAD_URL, {
+        method: 'POST', mode: 'no-cors',
+        headers: {'Content-Type': 'text/plain;charset=utf-8'},
+        body: payload
+    }).catch(() => {});
+    return false;
+}
+
+// 설문 URL에 요약값(점수·인식률·손 방향 등)을 프리필 파라미터로 붙인다.
+// FORM_ENTRY가 전부 비어 있으면 원본 FORMS_URL을 그대로 반환.
+function buildSurveyUrl(s){
+    const params = [];
+    const add = (entry, val) => { if(entry) params.push(entry + '=' + encodeURIComponent(val)); };
+    add(FORM_ENTRY.participantId, pid);
+    add(FORM_ENTRY.hand, selectedHand);
+    add(FORM_ENTRY.score, s.captcha.toFixed(3));
+    add(FORM_ENTRY.passed, s.captcha >= THRESHOLD ? '통과' : '차단');
+    add(FORM_ENTRY.detectionRate, (s.dR*100).toFixed(0) + '%');
+    if(params.length === 0) return FORMS_URL;
+    const sep = FORMS_URL.includes('?') ? '&' : '?';
+    return FORMS_URL + sep + 'usp=pp_url&' + params.join('&');
 }
 
 // ===== BOOTSTRAP (spec §7.2 step 1: 진입 → 카메라 자동 실행, 선택 단계 없음) =====
