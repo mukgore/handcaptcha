@@ -9,8 +9,8 @@
 추정인 이유는 손 동작을 일부분 손가림및테스트_handtest1_(2).py 코드를 이용해서 원 형태의 가림막으로 가리기 때문입니다.
 
 
-
 2. 실행 방법
+
    -한번 사용해보기 : prod 파일을 열면(https://mukgore.github.io/handcaptcha/hand_captcha_prod.html) 사용해볼 수 있습니다. 사용자의 카메라를 통해 손 인식을 진행하게 됩니다. 표시되는 안내에 따르시면 됩니다. 실제 완벽한 CAPTCHA가 아닌, 핵심 CAPTCHA 원리만을 확인하는 일종의 프로토타입입니다.
 
 
