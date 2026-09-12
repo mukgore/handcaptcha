@@ -1,0 +1,1010 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>손 동작 CAPTCHA</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@mediapipe/hands@0.4.1675469240/hands.js" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/@mediapipe/drawing_utils@0.3.1675466124/drawing_utils.js" crossorigin="anonymous"></script>
+    <style>
+        *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+        :root{--bg:#f8f9fb;--surface:#fff;--primary:#2563eb;--primary-hover:#1d4ed8;--danger:#dc2626;--success:#16a34a;--text:#1e293b;--text-secondary:#64748b;--border:#e2e8f0;--radius:12px;--shadow:0 1px 3px rgba(0,0,0,.08),0 4px 12px rgba(0,0,0,.04);--accent:#f59e0b}
+        body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text);height:100dvh;overflow:hidden;display:flex;flex-direction:column}
+        .header{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100}
+        .header-icon{width:32px;height:32px;background:var(--primary);border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:16px;font-weight:700}
+        .header-title{font-weight:700;font-size:16px}
+        .intro-banner{background:#eff6ff;color:#1e40af;border-bottom:1px solid #bfdbfe;padding:10px 20px;display:flex;align-items:center;justify-content:center;gap:14px;font-size:13px;font-weight:500;text-align:center;flex-shrink:0;transition:opacity .4s ease,max-height .4s ease,padding .4s ease;max-height:60px;overflow:hidden}
+        .intro-banner.hidden{opacity:0;max-height:0;padding-top:0;padding-bottom:0;border-bottom-width:0}
+        .intro-close{background:none;border:none;color:#1e40af;font-size:18px;line-height:1;cursor:pointer;padding:0 4px;flex-shrink:0}
+        .btn{display:inline-flex;align-items:center;justify-content:center;padding:12px 32px;border-radius:10px;font-family:inherit;font-size:15px;font-weight:600;border:none;cursor:pointer;transition:all .15s;gap:8px}
+        .btn:active{transform:scale(.97)}.btn-primary{background:var(--primary);color:#fff}.btn-primary:hover{background:var(--primary-hover)}.btn-lg{padding:14px 40px;font-size:16px}
+        .btn-secondary{background:#f1f5f9;color:var(--text-secondary)}.btn-secondary:hover{background:#e2e8f0}
+        .screen{display:none;flex:1;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;overflow-y:auto;min-height:0}
+        .screen.active{display:flex}
+        .trial-container{display:none;flex:1;flex-direction:column;width:100%;min-height:0;overflow:hidden}
+        .trial-container.active{display:flex}
+        .trial-content{display:flex;flex:1;gap:16px;padding:16px;overflow:hidden}
+        .trial-panel{flex:1;display:flex;flex-direction:column;background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;min-height:0}
+        .panel-header{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+        .panel-title{font-weight:600;font-size:14px}
+        .panel-badge{font-size:12px;padding:3px 10px;background:#f1f5f9;border-radius:20px;color:var(--text-secondary);font-weight:500}
+        .ref-area{flex:1;display:flex;align-items:center;justify-content:center;background:#0f172a;position:relative;min-height:0}
+        .ref-area canvas{width:100%;height:100%;object-fit:contain;transition:opacity 0.5s ease}
+        .ref-area canvas.fading{opacity:0}
+        .ref-area video{width:100%;height:100%;object-fit:contain;display:none;transition:opacity .5s ease}
+        .ref-area video.fading{opacity:0}
+        .keyframe-label{position:absolute;top:12px;left:12px;background:rgba(0,0,0,.7);color:#fff;font-size:12px;padding:4px 10px;border-radius:6px;font-weight:500;z-index:5}
+        .match-indicator{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);padding:6px 16px;border-radius:20px;font-size:13px;font-weight:600;z-index:5;transition:all .2s}
+        .match-indicator.waiting{background:rgba(245,158,11,.9);color:#fff}
+        .match-indicator.matched{background:rgba(22,163,74,.9);color:#fff}
+        .match-indicator.recording{background:rgba(220,38,38,.9);color:#fff;animation:pulse 1s infinite}
+        .match-indicator.playing{background:rgba(37,99,235,.9);color:#fff}
+        @keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
+        .camera-area{flex:1;display:flex;align-items:center;justify-content:center;background:#0f172a;position:relative;min-height:0}
+        .camera-area canvas{width:100%;height:100%;object-fit:contain}
+        .camera-area video{display:none}
+        .camera-placeholder{color:#94a3b8;text-align:center;font-size:14px;padding:24px}
+        .kf-progress{display:flex;gap:8px;justify-content:center;padding:10px;flex-shrink:0;flex-wrap:wrap}
+        .kf-step{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text-secondary)}
+        .kf-dot{width:28px;height:28px;border-radius:50%;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;transition:all .3s}
+        .kf-dot.active{border-color:var(--accent);background:#fef3c7;color:#92400e}
+        .kf-dot.done{border-color:var(--success);background:#dcfce7;color:#166534}
+        .kf-dot.rec{border-color:var(--danger);background:#fee2e2;color:#991b1b;animation:pulse 1s infinite}
+        .kf-arrow{color:var(--border);font-size:16px}
+        .status-bar{padding:8px 16px;text-align:center;font-size:13px;font-weight:500;flex-shrink:0}
+        .status-bar.waiting{background:#fef3c7;color:#92400e}
+        .status-bar.recording{background:#fee2e2;color:#991b1b}
+        .status-bar.playing{background:#dbeafe;color:#1e40af}
+        .status-bar.complete{background:#dcfce7;color:#166534;font-weight:700}
+        .loading-overlay{position:fixed;inset:0;background:rgba(255,255,255,.9);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:1000;gap:16px}
+        .loading-overlay.hidden{display:none}
+        .spinner{width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--primary);border-radius:50%;animation:spin .8s linear infinite}
+        @keyframes spin{to{transform:rotate(360deg)}}
+        .result-card{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);padding:32px;max-width:480px;width:100%}
+        .result-card h2{font-size:20px;font-weight:700;margin-bottom:20px;text-align:center}
+        .score-row{display:flex;justify-content:space-between;padding:10px 0;font-size:14px;border-bottom:1px solid var(--border)}
+        .score-row:last-child{border-bottom:none}
+        .score-row .label{color:var(--text-secondary)}.score-row .value{font-weight:600}
+        .score-final{display:flex;justify-content:space-between;padding:14px 0;font-size:16px;font-weight:700;border-top:2px solid var(--primary);margin-top:8px}
+        .verdict{text-align:center;padding:20px;margin-top:16px;border-radius:10px;font-size:18px;font-weight:700}
+        .verdict.pass{background:#dcfce7;color:#166534;border:1px solid #bbf7d0}
+        .verdict.fail{background:#fee2e2;color:#991b1b;border:1px solid #fecaca}
+        .btn-row{display:flex;gap:10px;justify-content:center;margin-top:20px}
+        .redirect-msg{text-align:center;color:var(--text-secondary);font-size:13px;margin-top:12px}
+        @media(max-width:768px){.trial-content{flex-direction:column;padding:6px;gap:6px}.trial-panel{flex:1 1 0;min-height:0}.header{padding:8px 12px}.header-title{font-size:14px}.panel-header{padding:6px 12px}.btn{padding:9px 20px;font-size:14px}}
+    </style>
+</head>
+<body>
+<div class="loading-overlay" id="loadingOverlay"><div class="spinner"></div><p style="font-size:14px;color:var(--text-secondary)">MediaPipe 모델 로딩 중...</p></div>
+<div class="header"><div class="header-icon">H</div><div class="header-title">손 동작 CAPTCHA</div></div>
+<div class="intro-banner" id="introBanner">
+    <span>🖐️ 10초 내외의 CAPTCHA 수행 후, 10문항 설문조사가 이어집니다.</span>
+    <button class="intro-close" id="introClose" aria-label="안내 닫기">×</button>
+</div>
+
+<div class="trial-container active" id="screenTrial">
+    <div class="kf-progress" id="kfProgress"></div>
+    <div class="trial-content">
+        <div class="trial-panel">
+            <div class="panel-header"><span class="panel-title">📌 목표 자세</span><span class="panel-badge" id="kfLabel">준비 중</span></div>
+            <div class="ref-area">
+                <canvas id="refCanvas"></canvas>
+                <video id="refVideo" muted playsinline></video>
+                <div class="keyframe-label" id="kfInfo"></div>
+                <div class="match-indicator waiting" id="matchInd">손을 비춰주세요</div>
+            </div>
+        </div>
+        <div class="trial-panel">
+            <div class="panel-header"><span class="panel-title">📷 카메라</span><span class="panel-badge" id="frameCounter">0 프레임</span></div>
+            <div class="camera-area"><video id="cameraVideo" playsinline autoplay></video><canvas id="cameraCanvas"></canvas><div class="camera-placeholder" id="cameraPlaceholder">카메라 초기화 중...</div></div>
+            <div class="status-bar waiting" id="statusBar">손을 비춰주세요</div>
+        </div>
+    </div>
+</div>
+
+<div class="screen" id="screenResult">
+    <div class="result-card">
+        <h2>📊 CAPTCHA 결과</h2>
+        <div class="score-row"><span class="label">전환 구간</span><span class="value" id="resSegments">-</span></div>
+        <div class="score-row"><span class="label">인식 프레임</span><span class="value" id="resDetection">-</span></div>
+        <div class="score-row"><span class="label">DTW-관절 (×0.38)</span><span class="value" id="resDtwAngle">-</span></div>
+        <div class="score-row"><span class="label">Accel (×0.37)</span><span class="value" id="resAccel">-</span></div>
+        <div class="score-row"><span class="label">관절 (×0.25)</span><span class="value" id="resAngle">-</span></div>
+        <div class="score-final"><span>최종 CAPTCHA 점수</span><span id="resFinal">-</span></div>
+        <div class="verdict" id="verdict"></div>
+        <div class="redirect-msg" id="redirectMsg"></div>
+        <div class="btn-row">
+            <button class="btn btn-primary btn-lg" id="btnSurvey">설문 참여하기 →</button>
+            <button class="btn btn-secondary" onclick="location.reload()">다시 시도</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// Site root the challenge pool is hosted from. Every pool_manifest.json entry
+// stores its video_file/landmarks_file relative to this same root (see
+// dataset_pipeline/export_pool.py and migrate_legacy_actions.py) -- pointing
+// this at a CDN/bucket instead of GitHub Pages is a pure config change.
+const POOL_BASE = 'https://mukgore.github.io/handcaptcha/';
+const MATCH_ANGLE_THRESH = 38;
+// 한 프레임의 우연한 일치로 즉시 통과하지 않도록, 일치 상태가 이 시간 이상
+// 연속 유지되어야 매칭으로 인정한다.
+const MATCH_HOLD_MS = 200;
+const THRESHOLD = 0.25;
+const W2 = {da:0.38, ac:0.37, a:0.25};
+const MX = {angle:46.9413, dtw_angle:44.0014, accel:0.1926};
+const AT = [[0,5,6],[5,6,7],[6,7,8],[0,9,10],[9,10,11],[10,11,12],[0,13,14],[13,14,15],[14,15,16],[0,17,18],[17,18,19],[18,19,20],[0,1,2],[1,2,3],[2,3,4]];
+const LN = ['WRIST','THUMB_CMC','THUMB_MCP','THUMB_IP','THUMB_TIP','INDEX_MCP','INDEX_PIP','INDEX_DIP','INDEX_TIP','MIDDLE_MCP','MIDDLE_PIP','MIDDLE_DIP','MIDDLE_TIP','RING_MCP','RING_PIP','RING_DIP','RING_TIP','PINKY_MCP','PINKY_PIP','PINKY_DIP','PINKY_TIP'];
+const FORMS_URL = 'https://forms.gle/7D6i33xrv4fkNuX99';
+
+// ===== 결과 전송 설정 =====
+// (1) 전체 JSON 업로드용 Google Apps Script 웹앱 URL. 비워두면 업로드를 건너뛰고
+//     곧바로 설문으로 이동한다(로컬 다운로드는 항상 유지).
+//     Apps Script > 배포 > 새 배포 > 웹앱(액세스: 모든 사용자) 의 /exec URL을 넣을 것.
+const UPLOAD_URL = ''; // 예: 'https://script.google.com/macros/s/AKfy.../exec'
+// (2) 설문(Form)에 요약값을 프리필할 entry ID 매핑. 비워둔 항목은 프리필하지 않는다.
+//     주의: 프리필은 forms.gle 단축링크가 아니라 전체 viewform URL에서만 동작하므로,
+//     프리필을 쓰려면 위 FORMS_URL을
+//     'https://docs.google.com/forms/d/e/<FORM_ID>/viewform' 형태로 교체할 것.
+//     entry ID는 Form 미리보기에서 각 질문에 임시 답을 넣고 '링크 미리 채우기'로 확인.
+const FORM_ENTRY = {
+    participantId: '', // 예: 'entry.111111111'
+    hand:          '', // 예: 'entry.222222222'
+    score:         '', // 예: 'entry.333333333'
+    passed:        '', // 예: 'entry.444444444'
+    detectionRate: ''  // 예: 'entry.555555555'
+};
+
+// MediaPipe Hands labels handedness assuming the input image is already
+// selfie-mirrored. This app always sends the raw (unmirrored) camera frame
+// to hands.send(), so the label must be swapped to match the true hand.
+// Re-verify against @mediapipe/hands@0.4.1675469240 on-device before shipping.
+const HANDEDNESS_SWAP = {Left:'right', Right:'left'};
+const HANDEDNESS_COMMIT_N = 8;
+const HANDEDNESS_MIN_SCORE = 0.7;
+
+const GHOST_FILL = 'rgba(37,99,235,0.45)';
+const GHOST_WIDTH_FRAC = 0.15;
+const GHOST_FINGERS = [[0,1,2,3,4],[0,5,6,7,8],[0,9,10,11,12],[0,13,14,15,16],[0,17,18,19,20]];
+const GHOST_FALLBACK_DELAY_MS = 300;
+
+// ===== FRAMING GUIDE (onboardinguxspec.md, merged into the real challenge --
+// there is no separate onboarding phase/screen: the real first target's real
+// video plays on the reference panel from the very start, and this overlay is
+// just a same-canvas hand-placement aid drawn on the CAMERA panel while the
+// user is still lining up for keyframe 0. Its reference pose is a FIXED,
+// generic open-hand pose -- NOT the real keyframe's landmark data -- so the
+// overlay never leaks a shape hint about the actual target gesture. Order
+// matches LN (WRIST..PINKY_TIP), normalized [0,1] image coordinates.) =====
+// 형태: 손바닥을 세우고 네 손가락을 나란히 모아 위로 편 채 엄지만 옆으로
+// 벌린 실루엣 (표지판/아이콘풍 손 모양). 손가락 사이 간격은 캡슐 굵기보다
+// 살짝 넓어 가는 틈이 보인다.
+const FRAMING_GUIDE_POSE = [
+    [0.50,0.86],
+    [0.62,0.80],[0.70,0.72],[0.77,0.65],[0.83,0.59],
+    [0.38,0.52],[0.38,0.40],[0.38,0.31],[0.38,0.24],
+    [0.47,0.51],[0.47,0.36],[0.47,0.26],[0.47,0.17],
+    [0.56,0.52],[0.56,0.38],[0.56,0.28],[0.56,0.21],
+    [0.65,0.55],[0.65,0.45],[0.65,0.37],[0.65,0.30]
+];
+const FRAMING_GUIDE_FILL = 'rgba(100,116,139,1)'; // slate, distinct from the blue matching-fallback ghost
+const FRAMING_WIGGLE_AMP = 0.012;
+const FRAMING_EDGE_MARGIN = 0.02;
+const FRAMING_PASS_HOLD_MS = 500;
+const FRAMING_TIMEOUT_MS = 6000;
+const FRAMING_FADE_MS = 500;
+// 가이드 통과 전에 첫 자세가 먼저 매칭돼 kfIdx가 넘어간 경우, 오버레이를
+// 즉시 끊지 않고 이 시간만큼 기다렸다가 페이드아웃한다.
+const FRAMING_DISMISS_WAIT_MS = 500;
+const FRAMING_DEFAULT_MSG = '카메라 프레임 안에 손을 맞춰주세요';
+const FRAMING_MESSAGES = {
+    no_hand: '손이 보이지 않아요. 카메라 쪽으로 손을 조금 더 가까이 대주세요.',
+    partial: '손 전체가 안 보여요. 카메라에서 조금 더 뒤로 물러나주세요.',
+    angle_mismatch: '손은 보이는데 아직 맞지 않아요. 손바닥이 카메라를 향하도록 각도를 조금만 조정해주세요.'
+};
+
+let selectedHand = null;
+let pid = 'user_' + Date.now().toString().slice(-4);
+let targetLm = null;
+let hands = null, camStream = null, animId = null, lastLm = null;
+let poolManifest = null, landmarksCache = {};
+let keyframes = [], kfIdx = 0;
+// phase: 'idle' | 'detecting_hand' | 'matching' | 'recording' | 'done'
+let phase = 'idle';
+let recStart = 0, segments = [], curSegFrames = [];
+let matchHoldStart = null;
+let videoPlaying = false;
+let fading = false;
+
+let handednessBuffer = [];
+let handLostSince = null, ghostFallbackActive = false;
+let ghostAnimId = null, ghostPlaying = false;
+
+let framingState = null, framingStateSince = 0, framingTimeoutMsgShown = false;
+let framingFadeStart = null, framingGuideStartTime = 0, framingOverlayDone = false;
+
+// Full-session raw landmark trace, independent of segments/curSegFrames
+// (which only cover "recording" transitions) -- covers every onRes() call
+// from handedness detection through completion, so the matching-wait
+// periods aren't lost. Included in the downloaded result JSON.
+let sessionLog = [], sessionStart = 0;
+
+const rv = document.getElementById('refVideo');
+const rc = document.getElementById('refCanvas');
+const rctx = rc.getContext('2d');
+const cv = document.getElementById('cameraVideo');
+const cc = document.getElementById('cameraCanvas');
+const ctx = cc.getContext('2d');
+
+// ===== DATA LOADING (manifest-driven challenge pool, spec §0 "챌린지 풀 확장") =====
+// pool_manifest.json only lists clip metadata (clip_id/handedness/paths) --
+// each clip's own (potentially large) landmark JSON is fetched lazily, only
+// for the handful of clips actually drawn for a session, so this scales to
+// however many thousand clips the pool grows to without a large upfront load.
+async function loadPoolManifest(){
+    try{ const r = await fetch(POOL_BASE+'pool_manifest.json'); poolManifest = await r.json(); }
+    catch(e){ try{ const r = await fetch('pool_manifest.json'); poolManifest = await r.json(); }catch(e2){} }
+}
+async function loadClipLandmarks(clip){
+    if(landmarksCache[clip.clip_id]) return landmarksCache[clip.clip_id];
+    // fetch()는 404에서도 resolve되므로 r.ok를 확인해야 한다 -- 안 하면 GitHub
+    // Pages의 404 HTML을 r.json()이 파싱하다 실패한다.
+    let d = null;
+    try{ const r = await fetch(POOL_BASE + clip.landmarks_file); if(r.ok) d = await r.json(); }catch(e){}
+    if(!d){
+        const r = await fetch(clip.landmarks_file);
+        if(!r.ok) throw new Error(`landmarks not found: ${clip.landmarks_file}`);
+        d = await r.json();
+    }
+    landmarksCache[clip.clip_id] = d;
+    return d;
+}
+function getBaseFromLandmarkData(d, mirror){
+    // mirror: the pool no longer keeps a separately-recorded clip per hand --
+    // each clip is recorded once (see clip.handedness) and horizontally
+    // mirrored at serve time for users of the opposite hand. Mirroring the
+    // COORDINATE DATA itself (not just what's displayed) is required so the
+    // pose-matching/scoring comparison is against the same thing the user
+    // actually sees on screen, not the original unmirrored recording.
+    const info = d.video_info||{}, w=info.width||720, h=info.height||720;
+    // 미검출 프레임을 걸러내면 배열 인덱스가 원본 비디오 프레임 번호와 어긋난다.
+    // 랜드마크 배열(frames)과 원본 프레임 번호(origIdx)를 나란히 반환해서,
+    // 비디오 시킹(time = origIdx/fps)이 항상 실제 영상 프레임과 일치하게 한다.
+    const frames=[], origIdx=[];
+    d.frames.forEach((f,i)=>{
+        if(!f.detected||!f.landmarks_px) return;
+        const lm=f.landmarks_px;
+        frames.push(LN.map(n => mirror ? [1 - lm[n].x/w, lm[n].y/h] : [lm[n].x/w, lm[n].y/h]));
+        origIdx.push(f.frame_idx !== undefined ? f.frame_idx : i);
+    });
+    return {frames, origIdx};
+}
+function getInfoFromLandmarkData(d){
+    const info = d.video_info || {};
+    return {width: info.width||720, height: info.height||720, fps: info.fps||24};
+}
+function findKeyframes(baseLm){
+    if(!baseLm||baseLm.length<10) return [0, Math.floor(baseLm.length/2), baseLm.length-1];
+    const vel=[];
+    for(let i=1;i<baseLm.length;i++){
+        let s=0; for(let j=0;j<21;j++){ const dx=baseLm[i][j][0]-baseLm[i-1][j][0], dy=baseLm[i][j][1]-baseLm[i-1][j][1]; s+=Math.sqrt(dx*dx+dy*dy); }
+        vel.push(s/21);
+    }
+    const w=5, sm=[];
+    for(let i=0;i<vel.length;i++){ let s=0,c=0; for(let j=Math.max(0,i-w);j<=Math.min(vel.length-1,i+w);j++){s+=vel[j];c++;} sm.push(s/c); }
+    const mins=[0];
+    for(let i=5;i<sm.length-5;i++) if(sm[i]<sm[i-1]&&sm[i]<sm[i+1]&&sm[i]<0.005&&(mins.length===0||i-mins[mins.length-1]>15)) mins.push(i);
+    mins.push(baseLm.length-1);
+    if(mins.length<=4) return mins;
+    const step=Math.floor(mins.length/3);
+    return [mins[0], mins[step], mins[step*2], mins[mins.length-1]];
+}
+
+// ===== POSE MATCHING =====
+function ang(p1,j,p2){
+    const v1=[p1[0]-j[0],p1[1]-j[1]], v2=[p2[0]-j[0],p2[1]-j[1]];
+    const dot=v1[0]*v2[0]+v1[1]*v2[1], m1=Math.sqrt(v1[0]*v1[0]+v1[1]*v1[1])+1e-8, m2=Math.sqrt(v2[0]*v2[0]+v2[1]*v2[1])+1e-8;
+    return Math.acos(Math.max(-1,Math.min(1,dot/(m1*m2))))*180/Math.PI;
+}
+function ppSingle(lm){
+    const w=lm[0], n=lm.map(p=>[p[0]-w[0],p[1]-w[1]]);
+    const dx=n[9][0],dy=n[9][1],h=Math.max(Math.sqrt(dx*dx+dy*dy),1e-6);
+    return n.map(p=>[p[0]/h,p[1]/h]);
+}
+function angleErr(uLm, tLm){
+    let tot=0,c=0; for(const[p,j,d]of AT){ tot+=Math.abs(ang(uLm[p],uLm[j],uLm[d])-ang(tLm[p],tLm[j],tLm[d])); c++; }
+    return tot/c;
+}
+
+// ===== GHOST HAND SILHOUETTE (spec §7.3: flat-color, ~40-50% opacity, no proximity color-coding) =====
+function unitPerp(a, b){
+    const dx=b[0]-a[0], dy=b[1]-a[1], len=Math.hypot(dx,dy)||1e-6;
+    return [-dy/len, dx/len];
+}
+function drawGhostSilhouette(landmarksPx, cctx, w, h, opts){
+    opts = opts || {};
+    const wrist = landmarksPx[0], midMcp = landmarksPx[9];
+    const scale = Math.hypot(midMcp[0]-wrist[0], midMcp[1]-wrist[1]) || 1;
+    const halfW = scale * GHOST_WIDTH_FRAC;
+
+    // skipClear/alphaScale/fillStyle let this same renderer be composited on
+    // top of an already-drawn camera frame (framing-guide overlay) instead of
+    // only ever owning its own canvas (the tutorial/fallback ghost use case).
+    if(!opts.skipClear) cctx.clearRect(0,0,w,h);
+    cctx.save();
+    if(opts.alphaScale !== undefined) cctx.globalAlpha = opts.alphaScale;
+    cctx.fillStyle = opts.fillStyle || GHOST_FILL;
+    cctx.beginPath();
+    for(const chain of GHOST_FINGERS){
+        const pts = chain.map(i => landmarksPx[i]);
+        const outward = [], inward = [];
+        for(let i=0;i<pts.length;i++){
+            const a = pts[Math.max(i-1,0)], b = pts[Math.min(i+1,pts.length-1)];
+            const [px,py] = unitPerp(a,b);
+            outward.push([pts[i][0]+px*halfW, pts[i][1]+py*halfW]);
+            inward.push([pts[i][0]-px*halfW, pts[i][1]-py*halfW]);
+        }
+        const path = outward.concat(inward.reverse());
+        cctx.moveTo(path[0][0], path[0][1]);
+        for(let i=1;i<path.length-1;i++){
+            const midX=(path[i][0]+path[i+1][0])/2, midY=(path[i][1]+path[i+1][1])/2;
+            cctx.quadraticCurveTo(path[i][0], path[i][1], midX, midY);
+        }
+        cctx.lineTo(path[0][0], path[0][1]);
+    }
+    // opts.palm: 손바닥 다각형(손목-네 MCP-엄지 CMC)을 같은 path에 합쳐
+    // 아이콘풍 통짜 실루엣을 만든다. 같은 fill 한 번에 그려야 반투명 알파가
+    // 겹침 없이 균일해진다. (프레이밍 가이드 전용 -- 고스트 폴백은 미사용)
+    if(opts.palm){
+        const palm = [0,5,9,13,17,1].map(i => landmarksPx[i]);
+        cctx.moveTo(palm[0][0], palm[0][1]);
+        for(let i=1;i<palm.length;i++) cctx.lineTo(palm[i][0], palm[i][1]);
+        cctx.closePath();
+    }
+    cctx.fill();
+    cctx.restore();
+}
+function playGhostLoop(frames, w, h, opts){
+    opts = opts || {};
+    stopGhostLoop();
+    if(!frames || frames.length === 0) return;
+    ghostPlaying = true;
+    rc.width = w; rc.height = h;
+    const fps = opts.fps || 24, frameDur = 1000/fps;
+    let idx = 0, last = performance.now();
+    function step(now){
+        if(!ghostPlaying) return;
+        if(now - last >= frameDur){
+            const denorm = frames[idx].map(p => [p[0]*w, p[1]*h]);
+            drawGhostSilhouette(denorm, rctx, w, h);
+            last = now; idx++;
+            if(idx >= frames.length){
+                if(opts.once){ stopGhostLoop(); if(opts.onDone) opts.onDone(); return; }
+                idx = 0;
+            }
+        }
+        ghostAnimId = requestAnimationFrame(step);
+    }
+    ghostAnimId = requestAnimationFrame(step);
+}
+function stopGhostLoop(){
+    ghostPlaying = false;
+    if(ghostAnimId) cancelAnimationFrame(ghostAnimId);
+    ghostAnimId = null;
+}
+
+// ===== SEQUENCE (2 pool clips become the real challenge; no held-back
+// tutorial clip -- the real first target's video plays immediately, with a
+// hand-placement ghost overlay on the camera panel while lining up for it,
+// see drawFramingGuideOverlay) =====
+// Each clip is recorded once, in ONE hand (clip.handedness) -- there is no
+// separate left/right recording of the same gesture. Any clip can be shown
+// to either hand: clips of the opposite hand get mirrored (video display AND
+// landmark data, see getBaseFromLandmarkData) rather than being excluded.
+async function genSequence(){
+    const handLabel = selectedHand === 'left' ? 'Left' : 'Right';
+    const candidates = poolManifest && poolManifest.clips || [];
+    if(candidates.length < 2){
+        console.error(`Pool has only ${candidates.length} clips total (need >= 2)`);
+    }
+    const shuffled = [...candidates].sort(() => Math.random()-0.5);
+
+    // manifest에 있어도 landmarks 파일이 서버에 없는(404) 클립이 있을 수 있다.
+    // 고정된 2개를 뽑아 실패 시 그대로 죽는 대신, 셔플된 목록을 순회하며
+    // 실제로 로드에 성공한 클립 2개를 채울 때까지 시도한다.
+    keyframes = [];
+    let usedClips = 0;
+    for(const clip of shuffled){
+        if(usedClips >= 2) break;
+        const mirror = clip.handedness !== handLabel;
+        let d;
+        try{ d = await loadClipLandmarks(clip); }
+        catch(e){ console.error(`clip ${clip.clip_id}: landmarks load failed, skipping`, e); continue; }
+        const {frames: baseLm, origIdx} = getBaseFromLandmarkData(d, mirror);
+        if(!baseLm || baseLm.length === 0) continue;
+        const info = getInfoFromLandmarkData(d);
+        const kfIdxs = findKeyframes(baseLm);
+        for(const fi of kfIdxs) keyframes.push({clip, mirror, frameIdx:fi, time:origIdx[fi]/info.fps, baseLm:baseLm[fi], allBaseLm:baseLm, fps:info.fps, width:info.width, height:info.height});
+        usedClips++;
+    }
+    if(usedClips < 2) console.error(`Only ${usedClips} usable clips loaded (need 2)`);
+    const prog = document.getElementById('kfProgress');
+    prog.innerHTML = keyframes.map((_,i)=>{
+        const arrow = i<keyframes.length-1 ? '<span class="kf-arrow">→</span>' : '';
+        return `<div class="kf-step"><div class="kf-dot" id="kfd${i}">${i+1}</div>${arrow}</div>`;
+    }).join('');
+}
+
+// ===== FRAMING GUIDE (onboardinguxspec.md §2, merged into the real challenge
+// per user clarification -- no separate onboarding stage: the reference
+// panel already plays the real first target's real video via
+// showKeyframeImage(0) below. This overlay is only a hand-placement aid drawn
+// on the CAMERA panel (kept from the original spec) while the user is still
+// lining up for keyframe 0, gated in onRes() by `kfIdx===0`. =====
+
+function framingGuideFrame(tMs){
+    const t = tMs / 1000;
+    return FRAMING_GUIDE_POSE.map((p, i) => {
+        if(i === 0) return p; // wrist anchor stays fixed
+        const phaseOff = i * 0.7;
+        const dx = Math.sin(t*1.3 + phaseOff) * FRAMING_WIGGLE_AMP;
+        const dy = Math.cos(t*1.1 + phaseOff) * FRAMING_WIGGLE_AMP * 0.5;
+        return [p[0]+dx, p[1]+dy];
+    });
+}
+
+// Priority-ordered classification (onboardinguxspec.md §2 Step 1): a lower-
+// numbered condition must never be masked by a higher-numbered one passing
+// first. lm: array of [x,y,z] in normalized [0,1] image coordinates (or null
+// when !has). bbox-vs-frame-edge uses a direct geometric compare, not model
+// confidence, since MediaPipe can hallucinate a plausible high-confidence
+// position for a hand that is actually clipped by the frame edge.
+function evaluateFramingState(lm, has){
+    if(!has || !lm) return 'no_hand';
+    let minX=1, maxX=0, minY=1, maxY=0;
+    for(const p of lm){
+        if(p[0]<minX) minX=p[0]; if(p[0]>maxX) maxX=p[0];
+        if(p[1]<minY) minY=p[1]; if(p[1]>maxY) maxY=p[1];
+    }
+    if(minX<=FRAMING_EDGE_MARGIN || maxX>=1-FRAMING_EDGE_MARGIN || minY<=FRAMING_EDGE_MARGIN || maxY>=1-FRAMING_EDGE_MARGIN){
+        return 'partial';
+    }
+    // Reuses "방안 A"'s angle-comparison (ppSingle/angleErr) against a FIXED
+    // generic pose (FRAMING_GUIDE_POSE), never the real target -- so this
+    // check can't leak a shape hint about the actual gesture. NOT the CAPTCHA
+    // scoring formula (too heavy/strict for this static, low-speed check, see
+    // onboardinguxspec.md §3).
+    const err = angleErr(ppSingle(lm), ppSingle(FRAMING_GUIDE_POSE));
+    if(err >= MATCH_ANGLE_THRESH) return 'angle_mismatch';
+    return 'pass';
+}
+
+// Called every onRes() frame while working on keyframe 0, regardless of
+// whether a hand is currently detected, so timeouts/state keep advancing even
+// through 'no_hand'. Hysteresis: a state must hold continuously for
+// FRAMING_PASS_HOLD_MS (pass) before triggering fade-out, filtering flicker
+// from momentary misdetections.
+function updateFramingGuide(lm, has){
+    if(framingOverlayDone || framingFadeStart !== null) return;
+    const now = performance.now();
+    const state = evaluateFramingState(lm, has);
+    if(state !== framingState){
+        framingState = state;
+        framingStateSince = now;
+        framingTimeoutMsgShown = false;
+        if(state !== 'pass') setS('waiting', FRAMING_DEFAULT_MSG);
+    }
+    const elapsed = now - framingStateSince;
+    if(state === 'pass'){
+        if(elapsed >= FRAMING_PASS_HOLD_MS) framingFadeStart = now;
+    } else if(elapsed >= FRAMING_TIMEOUT_MS && !framingTimeoutMsgShown){
+        framingTimeoutMsgShown = true;
+        setS('waiting', FRAMING_MESSAGES[state]);
+    }
+}
+
+// Draws onto the CAMERA canvas (ctx/cc), composited on top of the already-
+// drawn camera frame -- called from onRes() while the mirror transform is
+// still active, so guide coordinates share the same raw/pre-mirror space as
+// the drawn camera image. Shape is the fixed generic FRAMING_GUIDE_POSE
+// (gently animated), never the real target's motion, so it can't tip off
+// which gesture is coming.
+function drawFramingGuideOverlay(now){
+    if(framingOverlayDone) return;
+    let alpha = 0.85;
+    if(framingFadeStart !== null){
+        // framingFadeStart는 미래 시각일 수 있다(대기 후 페이드) -- t<0 동안은 완전 불투명 유지
+        const t = (now - framingFadeStart) / FRAMING_FADE_MS;
+        alpha *= Math.min(1, Math.max(0, 1 - t));
+        if(t >= 1){
+            framingOverlayDone = true;
+            if(phase === 'matching' && kfIdx === 0) setS('waiting', '목표 동작을 따라해주세요');
+            return;
+        }
+    }
+    const frame = framingGuideFrame(now - framingGuideStartTime);
+    const denorm = frame.map(p => [p[0]*cc.width, p[1]*cc.height]);
+    drawGhostSilhouette(denorm, ctx, cc.width, cc.height, {alphaScale: alpha, skipClear: true, fillStyle: FRAMING_GUIDE_FILL, palm: true});
+}
+
+function startRealChallenge(){
+    stopGhostLoop();
+    if(keyframes.length === 0){
+        phase = 'idle';
+        updateMatchIndicator('waiting', '데이터 로드 실패');
+        setS('waiting', '챌린지 데이터를 불러오지 못했습니다. 페이지를 새로고침 해주세요.');
+        return;
+    }
+    segments = []; kfIdx = 0; curSegFrames = []; matchHoldStart = null;
+    framingState = null; framingStateSince = performance.now(); framingTimeoutMsgShown = false;
+    framingFadeStart = null; framingOverlayDone = false; framingGuideStartTime = performance.now();
+    document.getElementById('frameCounter').textContent = '0 프레임';
+    showKeyframeImage(0);
+    phase = 'matching';
+    updateMatchIndicator('waiting', '자세를 맞춰주세요');
+    setS('waiting', '목표 동작을 따라해주세요');
+}
+
+// ===== SHOW KEYFRAME =====
+function showKeyframeImage(idx){
+    const kf = keyframes[idx];
+    targetLm = kf.baseLm;
+    document.getElementById('kfLabel').textContent = `자세 ${idx+1}/${keyframes.length}`;
+    document.getElementById('kfInfo').textContent = `${kf.clip.clip_id} #${kf.frameIdx}`;
+
+    // 목표 자세는 캔버스에 스냅샷을 그리는 게 아니라, 숨겨져 있던 <video>
+    // 자체를 해당 키프레임 시각에 멈춘 상태로 그대로 보여준다. 캔버스(rc)는
+    // 이제 고스트 폴백 재생 전용이다.
+    rv.pause();
+    rv.style.transform = kf.mirror ? 'scaleX(-1)' : 'none';
+    rv.style.display = 'block'; rc.style.display = 'none';
+    const src = POOL_BASE + kf.clip.video_file;
+    if(rv.src !== src){
+        rv.src = src;
+        rv.load();
+        rv.oncanplay = () => { rv.currentTime = kf.time; rv.oncanplay = null; };
+    } else {
+        rv.currentTime = kf.time;
+    }
+
+    updateDots(idx);
+}
+function updateDots(activeIdx){
+    for(let i=0;i<keyframes.length;i++){
+        document.getElementById('kfd'+i).className = 'kf-dot'+(i<activeIdx?' done':i===activeIdx?' active':'');
+    }
+}
+function updateMatchIndicator(cls, text){
+    const mi=document.getElementById('matchInd'); mi.className='match-indicator '+cls; mi.textContent=text;
+}
+function setS(t,h){ const s=document.getElementById('statusBar'); s.className='status-bar '+t; s.innerHTML=h; }
+
+// ===== TRANSITION (existing "방안 A" video-crossfade logic, reused as-is) =====
+function onFirstKeyframeMatched(){
+    document.getElementById('kfd0').className = 'kf-dot done';
+    dismissIntroBanner();
+    beginNextTransition();
+}
+
+function beginNextTransition(){
+    phase = 'recording';
+    videoPlaying = false;
+    recStart = performance.now();
+    curSegFrames = [];
+    matchHoldStart = null;
+
+    kfIdx++;
+    if(kfIdx >= keyframes.length){ showResult(); return; }
+
+    targetLm = keyframes[kfIdx].baseLm;
+    document.getElementById('kfLabel').textContent = `자세 ${kfIdx+1}/${keyframes.length}`;
+    document.getElementById('kfInfo').textContent = `${keyframes[kfIdx].clip.clip_id} #${keyframes[kfIdx].frameIdx}`;
+    updateDots(kfIdx);
+    // updateDots는 activeIdx 이전 dot을 전부 'done'으로 덮어쓰므로, 녹화 중
+    // 표시(rec)는 updateDots 이후에 다시 지정해야 화면에 남는다.
+    document.getElementById('kfd'+(kfIdx-1)).className = 'kf-dot rec';
+
+    updateMatchIndicator('playing', '▶ 영상 재생 중...');
+    setS('playing', '영상을 보면서 다음 자세를 준비하세요');
+
+    const fromKf = keyframes[kfIdx-1];
+    const toKf = keyframes[kfIdx];
+
+    if(fromKf.clip.clip_id === toKf.clip.clip_id){
+        rv.style.transform = toKf.mirror ? 'scaleX(-1)' : 'none';
+        rv.style.display = 'block'; rc.style.display = 'none';
+        videoPlaying = true;
+        rv.currentTime = fromKf.time;
+        rv.play();
+        const stopTime = toKf.time;
+        // 영상이 디코딩 불가(코덱 미지원)거나 멈춰버리면 currentTime이 stopTime에
+        // 도달하지 못한다 -- 구간 길이 + 3초를 넘기면 강제로 다음 단계로 진행해
+        // "영상 재생 중..."에서 세션이 영구히 멈추는 것을 막는다.
+        const playDeadline = performance.now() + (stopTime - fromKf.time)*1000 + 3000;
+        const checkLoop = () => {
+            if(rv.currentTime >= stopTime - 0.05 || rv.error || performance.now() > playDeadline){
+                // 영상을 멈추고 그 프레임을 그대로 목표 자세로 보여준다 (캔버스
+                // 스냅샷 없음). 사용자는 재생 중에도 실시간으로 따라하므로
+                // 녹화(recStart/curSegFrames)는 전환 시작 시점부터 계속 이어진다.
+                rv.pause();
+                videoPlaying = false;
+                updateMatchIndicator('recording', '자세를 맞춰주세요');
+                setS('recording', '영상이 멈췄습니다. 자세를 따라하세요');
+            } else requestAnimationFrame(checkLoop);
+        };
+        checkLoop();
+    } else {
+        showKeyframeImage(kfIdx);
+        updateMatchIndicator('recording', '자세를 맞춰주세요');
+        setS('recording', '다음 자세로 전환해 주세요');
+    }
+}
+
+function onTransitionMatched(){
+    segments.push({
+        fromKf: kfIdx-1, toKf: kfIdx,
+        fromClip: keyframes[kfIdx-1].clip.clip_id, toClip: keyframes[kfIdx].clip.clip_id,
+        frames: curSegFrames.slice(),
+        duration: curSegFrames.length>0 ? curSegFrames[curSegFrames.length-1].t : 0
+    });
+    document.getElementById('kfd'+(kfIdx-1)).className = 'kf-dot done';
+
+    if(kfIdx >= keyframes.length-1){
+        document.getElementById('kfd'+kfIdx).className = 'kf-dot done';
+        phase = 'done';
+        updateMatchIndicator('matched', '완료');
+        setS('complete', '✅ 모든 동작이 완료되었습니다!');
+        setTimeout(showResult, 500);
+    } else {
+        beginNextTransition();
+    }
+}
+
+// ===== HANDEDNESS AUTO-DETECTION (spec §7.2 step 3, replaces manual 왼손/오른손 buttons) =====
+function handleHandednessSample(rawLabel, rawScore){
+    // commit 후 genSequence(비동기 fetch)가 끝날 때까지 phase가 'detecting_hand'로
+    // 남아 있어, 가드가 없으면 버퍼가 다시 차서 genSequence가 중복 실행된다.
+    if(selectedHand) return;
+    if(!rawLabel) return;
+    const trueSide = HANDEDNESS_SWAP[rawLabel];
+    if(!trueSide) return;
+    handednessBuffer.push({side: trueSide, score: rawScore || 0});
+    if(handednessBuffer.length > HANDEDNESS_COMMIT_N) handednessBuffer.shift();
+
+    if(handednessBuffer.length === HANDEDNESS_COMMIT_N){
+        const allSame = handednessBuffer.every(b => b.side === handednessBuffer[0].side);
+        const avgScore = handednessBuffer.reduce((s,b)=>s+b.score,0) / handednessBuffer.length;
+        if(allSame && avgScore > HANDEDNESS_MIN_SCORE){
+            selectedHand = handednessBuffer[0].side;
+            handednessBuffer = [];
+            genSequence().then(startRealChallenge);
+        }
+        // else: buffer keeps rolling via shift() above — no numeric/retry feedback shown (§7.4)
+    }
+}
+
+// ===== LIVE GHOST FALLBACK while waiting for the target pose =====
+function maybeShowGhostFallback(){
+    if(phase !== 'matching' || !keyframes[kfIdx]) return;
+    if(handLostSince === null) handLostSince = performance.now();
+    if(!ghostFallbackActive && performance.now() - handLostSince > GHOST_FALLBACK_DELAY_MS){
+        ghostFallbackActive = true;
+        fading = true;
+        rv.classList.add('fading'); rc.classList.add('fading');
+        setTimeout(() => {
+            const kf = keyframes[kfIdx];
+            rv.style.display = 'none'; rc.style.display = 'block';
+            playGhostLoop(kf.allBaseLm, kf.width, kf.height, {fps: kf.fps});
+            rv.classList.remove('fading'); rc.classList.remove('fading');
+            setTimeout(() => { fading = false; }, 500);
+        }, 500);
+    }
+}
+function maybeHideGhostFallback(){
+    handLostSince = null;
+    if(!ghostFallbackActive) return;
+    ghostFallbackActive = false;
+    fading = true;
+    rv.classList.add('fading'); rc.classList.add('fading');
+    setTimeout(() => {
+        stopGhostLoop();
+        if(phase === 'matching') showKeyframeImage(kfIdx);
+        rv.classList.remove('fading'); rc.classList.remove('fading');
+        setTimeout(() => { fading = false; }, 500);
+    }, 500);
+}
+
+// ===== MEDIAPIPE =====
+async function initMP(){
+    hands = new Hands({locateFile:f=>`https://unpkg.com/@mediapipe/hands@0.4.1675469240/${f}`});
+    hands.setOptions({maxNumHands:1, modelComplexity:1, minDetectionConfidence:0.35, minTrackingConfidence:0.4});
+    hands.onResults(onRes);
+    await hands.initialize();
+    document.getElementById('loadingOverlay').classList.add('hidden');
+}
+
+async function initCam(){
+    try{
+        camStream = await navigator.mediaDevices.getUserMedia({video: {facingMode:'user', width:{ideal:640}, height:{ideal:480}}});
+        cv.srcObject = camStream; await cv.play();
+        cc.width = cv.videoWidth||640; cc.height = cv.videoHeight||480;
+        document.getElementById('cameraPlaceholder').style.display = 'none'; cc.style.display = 'block';
+        (async function loop(){ if(cv.readyState>=2) await hands.send({image:cv}); animId = requestAnimationFrame(loop); })();
+    }catch(e){ document.getElementById('cameraPlaceholder').textContent = '카메라 접근이 거부되었습니다.'; }
+}
+
+function onRes(r){
+    // 전면 카메라 미리보기는 자연스러운 셀피 반전을 위해 화면에만 좌우 반전 적용
+    const videoTrack = camStream ? camStream.getVideoTracks()[0] : null;
+    const settings = videoTrack ? videoTrack.getSettings() : {};
+    const isFront = settings.facingMode === 'user' || (videoTrack && videoTrack.label.toLowerCase().includes('front'));
+    const getX = (val) => isFront ? 1 - val : val;
+
+    const has = r.multiHandLandmarks && r.multiHandLandmarks.length > 0;
+    const lm = has ? r.multiHandLandmarks[0] : null;
+
+    ctx.save();
+    ctx.clearRect(0, 0, cc.width, cc.height);
+    if(isFront){ ctx.translate(cc.width, 0); ctx.scale(-1, 1); }
+    ctx.drawImage(r.image, 0, 0, cc.width, cc.height);
+    // Framing-guide overlay is drawn here (same mirrored transform as the
+    // camera image, before ctx.restore()) so it visually mirrors together
+    // with the live feed on front cameras -- see drawFramingGuideOverlay().
+    // kfIdx가 0을 지나도(가이드 통과 전에 첫 자세가 먼저 매칭된 경우) 즉시
+    // 끊지 않고, 잠시 기다렸다가 페이드아웃이 끝날 때까지 계속 그린다.
+    if(!framingOverlayDone && (phase === 'matching' || phase === 'recording')){
+        if(kfIdx > 0 && framingFadeStart === null) framingFadeStart = performance.now() + FRAMING_DISMISS_WAIT_MS;
+        drawFramingGuideOverlay(performance.now());
+    }
+    ctx.restore();
+
+    // 사용자 손 스켈레톤 오버레이: 인식 여부/위치 피드백용. 색상은 항상 고정 —
+    // 목표 자세와의 근접도에 따라 색/굵기를 바꾸지 않는다(§7.4: 세분화된 근접도
+    // 신호는 탐색 기반 공격의 오라클이 될 수 있음). 좌표는 카메라 표시와 동일한
+    // getX(미러) 공간을 쓰므로 화면 위 손과 정확히 겹친다.
+    if(has){
+        const skelLm = lm.map(l => ({x: getX(l.x), y: l.y, z: l.z}));
+        drawConnectors(ctx, skelLm, HAND_CONNECTIONS, {color:'#00FF88', lineWidth:2});
+        drawLandmarks(ctx, skelLm, {color:'#FF4444', lineWidth:1, radius:3});
+    }
+
+    const nowT = performance.now() - sessionStart;
+
+    // Framing-guide state evaluation runs every frame regardless of `has`
+    // while still working on keyframe 0 (a dropped-hand frame is itself the
+    // 'no_hand' state, not something to skip) -- this only drives the overlay
+    // /timeout messages above and does NOT gate or replace the real matching
+    // check further below, which still requires `has`.
+    if(phase === 'matching' && kfIdx === 0){
+        updateFramingGuide(has ? lm.map(l => [l.x, l.y, l.z]) : null, has);
+    }
+
+    if(!has){
+        lastLm = null;
+        matchHoldStart = null;
+        sessionLog.push({t: nowT, phase, detected: false, lm: null});
+        if(phase === 'recording') curSegFrames.push({t: performance.now()-recStart, lm: null});
+        maybeShowGhostFallback();
+        return;
+    }
+    maybeHideGhostFallback();
+
+    lastLm = lm;
+    // Logged post-getX (display/scoring convention) for every phase, including
+    // detecting_hand, so the session trace uses one consistent coordinate
+    // space throughout -- this is separate from the raw pre-mirror label read
+    // used for handedness classification just below.
+    const rawLm = lm.map(l => [getX(l.x), l.y, l.z]);
+    sessionLog.push({t: nowT, phase, detected: true, lm: rawLm});
+
+    // 손 판별(handedness)은 반전 이전, 원본 센서 프레임 기준 라벨을 그대로 읽는다 (위 getX는
+    // 표시/좌표용 반전일 뿐, handedness 판정 자체에는 관여하지 않음).
+    if(phase === 'detecting_hand'){
+        const h = r.multiHandedness && r.multiHandedness[0];
+        handleHandednessSample(h ? h.label : null, h ? h.score : 0);
+        return;
+    }
+
+    const userLm = rawLm;
+
+    if(phase === 'matching' && kfIdx < keyframes.length && targetLm){
+        const uPP = ppSingle(userLm), tPP = ppSingle(targetLm);
+        const err = angleErr(uPP, tPP);
+        if(err < MATCH_ANGLE_THRESH){
+            if(matchHoldStart === null) matchHoldStart = performance.now();
+            updateMatchIndicator('matched', '자세가 맞습니다');
+            if(performance.now() - matchHoldStart >= MATCH_HOLD_MS){
+                matchHoldStart = null;
+                onFirstKeyframeMatched();
+            }
+        } else {
+            matchHoldStart = null;
+            updateMatchIndicator('waiting', '자세를 맞춰주세요');
+        }
+    }
+
+    if(phase === 'recording'){
+        curSegFrames.push({t: performance.now()-recStart, lm: userLm});
+        document.getElementById('frameCounter').textContent = curSegFrames.length + ' 프레임';
+
+        if(videoPlaying || fading) return;
+
+        if(kfIdx < keyframes.length && targetLm){
+            const uPP = ppSingle(userLm), tPP = ppSingle(targetLm);
+            const err = angleErr(uPP, tPP);
+            if(err < MATCH_ANGLE_THRESH){
+                if(matchHoldStart === null) matchHoldStart = performance.now();
+                updateMatchIndicator('matched', '자세가 맞습니다');
+                if(performance.now() - matchHoldStart >= MATCH_HOLD_MS){
+                    matchHoldStart = null;
+                    onTransitionMatched();
+                }
+            } else {
+                matchHoldStart = null;
+            }
+        }
+    }
+}
+
+// ===== UI =====
+function showScr(id){ document.querySelectorAll('.screen,.trial-container').forEach(s => s.classList.remove('active')); document.getElementById(id).classList.add('active'); }
+
+// ===== METRICS =====
+function pp(f){ if(!f||f.length<3)return null; return f.map(fr=>{ const w=fr[0],n=fr.map(p=>[p[0]-w[0],p[1]-w[1]]); const dx=n[9][0],dy=n[9][1],h=Math.max(Math.sqrt(dx*dx+dy*dy),1e-6); return n.map(p=>[p[0]/h,p[1]/h]); }); }
+function rs(d,n){ if(!d||d.length<3)return null; if(d.length===n)return d; const r=[]; for(let t=0;t<n;t++){ const s=t/(n-1)*(d.length-1),lo=Math.floor(s),hi=Math.min(lo+1,d.length-1),f=s-lo; r.push(d[lo].map((p,i)=>[p[0]*(1-f)+d[hi][i][0]*f,p[1]*(1-f)+d[hi][i][1]*f])); } return r; }
+function mA(t,b){ const tr=rs(t,b.length); if(!tr)return null; let tot=0,c=0; for(const[p,j,d]of AT){ let s=0; for(let i=0;i<b.length;i++) s+=Math.abs(ang(b[i][p],b[i][j],b[i][d])-ang(tr[i][p],tr[i][j],tr[i][d])); tot+=s/b.length;c++; } return tot/c; }
+function mDA(t,b){ if(!t||t.length<3||!b||b.length<3)return null; const tr=rs(t,Math.round(b.length*1.2)); if(!tr)return null; let best=1e9; for(let sh=0;sh<=tr.length-b.length;sh++){ const s=tr.slice(sh,sh+b.length); let tot=0,c=0; for(const[p,j,d]of AT){ let sm=0; for(let i=0;i<b.length;i++) sm+=Math.abs(ang(b[i][p],b[i][j],b[i][d])-ang(s[i][p],s[i][j],s[i][d])); tot+=sm/b.length;c++; } best=Math.min(best,tot/c); } return best; }
+function mAc(t,b){ const tr=rs(t,b.length); if(!tr||b.length<5)return null; function ac(d){ const r=[]; for(let i=1;i<d.length-1;i++){ let s=0,c=0; for(let j=1;j<21;j++){ const ax=d[i+1][j][0]-2*d[i][j][0]+d[i-1][j][0],ay=d[i+1][j][1]-2*d[i][j][1]+d[i-1][j][1]; s+=Math.sqrt(ax*ax+ay*ay);c++; } r.push(s/c); } return r; } const ba=ac(b),ta=ac(tr); if(ba.length!==ta.length)return null; let s=0; for(let i=0;i<ba.length;i++)s+=Math.abs(ba[i]-ta[i]); return s/ba.length; }
+function es(raw,mx,dr,hi=false){ if(raw===null)return 0; const n=mx>0?raw/mx:0; return Math.max(0,Math.min(1,hi?dr*Math.min(1,n):dr*Math.max(0,1-n))); }
+
+function computeScores(){
+    let allUserLm=[], allBaseLm=[];
+    for(const seg of segments){
+        const det=seg.frames.filter(f=>f.lm!==null).map(f=>f.lm);
+        if(det.length<3) continue;
+        const fromKf=keyframes[seg.fromKf], toKf=keyframes[seg.toKf];
+        let baseSeg;
+        if(fromKf.clip.clip_id===toKf.clip.clip_id) baseSeg=fromKf.allBaseLm.slice(fromKf.frameIdx, toKf.frameIdx+1);
+        else baseSeg=[...fromKf.allBaseLm.slice(fromKf.frameIdx), ...toKf.allBaseLm.slice(0,toKf.frameIdx+1)];
+        allUserLm.push(...det); allBaseLm.push(...baseSeg);
+    }
+    const tF=segments.reduce((s,seg)=>s+seg.frames.length,0), dC=allUserLm.length, dR=tF>0?dC/tF:0;
+    const bPP=pp(allBaseLm), tPP=pp(allUserLm);
+    let rA=null, rDA=null, rAc=null;
+    if(tPP&&bPP&&tPP.length>=3){ rA=mA(tPP,bPP); rDA=mDA(tPP,bPP); rAc=mAc(tPP,bPP); }
+    const sA=es(rA,MX.angle,dR), sDA=es(rDA,MX.dtw_angle,dR), sAc=es(rAc,MX.accel,dR);
+    const fin=sDA*W2.da+sAc*W2.ac+sA*W2.a;
+    return { totalSegments:segments.length, tF, dC, dR, rA, rDA, rAc, sA, sDA, sAc, captcha:fin };
+}
+
+function showResult(){
+    const s = computeScores();
+    document.getElementById('resSegments').textContent = `${s.totalSegments}개 전환 구간`;
+    document.getElementById('resDetection').textContent = `${s.dC}/${s.tF} (${(s.dR*100).toFixed(0)}%)`;
+    document.getElementById('resDtwAngle').textContent = s.sDA.toFixed(3);
+    document.getElementById('resAccel').textContent = s.sAc.toFixed(3);
+    document.getElementById('resAngle').textContent = s.sA.toFixed(3);
+    document.getElementById('resFinal').textContent = s.captcha.toFixed(3);
+
+    const v = document.getElementById('verdict');
+    if(s.captcha >= THRESHOLD){
+        v.className = 'verdict pass';
+        v.textContent = `✅ 통과 (${s.captcha.toFixed(3)} ≥ ${THRESHOLD})`;
+    } else {
+        v.className = 'verdict fail';
+        v.textContent = `❌ 차단 (${s.captcha.toFixed(3)} < ${THRESHOLD})`;
+    }
+
+    if(animId) cancelAnimationFrame(animId);
+    if(camStream) camStream.getTracks().forEach(t => t.stop());
+
+    const result = {
+        experimentInfo: {participantId: pid, selectedHand, timestamp: Date.now(), version: 'prod_v2_pool'},
+        keyframes: keyframes.map(kf => ({clip: kf.clip.clip_id, frameIdx: kf.frameIdx})),
+        segments: segments.map(seg => ({
+            fromKf: seg.fromKf, toKf: seg.toKf,
+            fromClip: seg.fromClip, toClip: seg.toClip,
+            totalFrames: seg.frames.length,
+            detectedFrames: seg.frames.filter(f => f.lm !== null).length,
+            duration: seg.duration,
+            frames: seg.frames
+        })),
+        scores: {
+            detectionRate: s.dR, totalFrames: s.tF, detectedFrames: s.dC,
+            raw: {angle: s.rA, dtw_angle: s.rDA, accel: s.rAc},
+            estimated: {angle: s.sA, dtw_angle: s.sDA, accel: s.sAc},
+            captcha: s.captcha, threshold: THRESHOLD, passed: s.captcha >= THRESHOLD,
+            weights: W2
+        },
+        // 전체 세션의 원시 손 랜드마크 궤적 (detecting_hand부터 완료까지 전 구간,
+        // segments/curSegFrames가 다루지 않는 매칭 대기 구간도 포함).
+        sessionLog
+    };
+
+    const blob = new Blob([JSON.stringify(result, null, 2)], {type: 'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `hand_captcha_${selectedHand}_${pid}_${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    showScr('screenResult');
+
+    const surveyUrl = buildSurveyUrl(s);
+    let navigated = false;
+    const goSurvey = () => { if(navigated) return; navigated = true; window.location.href = surveyUrl; };
+
+    // 업로드는 백그라운드 best-effort -- 완료를 기다리지 않고 곧바로 이동한다.
+    // sendBeacon/keepalive fetch 모두 페이지 이동 후에도 브라우저가 전송을
+    // 이어가도록 보장되지만, 둘 다 페이로드 상한(브라우저별 대략 64KB)이 있어
+    // 그보다 큰 세션 로그는 이동 시 끊길 수 있다 -- 그래서 로컬 다운로드를
+    // 항상 백업으로 남긴다.
+    sendResult(JSON.stringify(result));
+
+    // btnSurvey는 자동 이동이 어떤 이유로든(예: 임베드된 iframe에서 top-level
+    // 이동이 차단되는 경우) 먹히지 않을 때를 위한 수동 대체 수단으로 둔다.
+    document.getElementById('redirectMsg').textContent = '설문으로 이동합니다...';
+    document.getElementById('btnSurvey').onclick = goSurvey;
+    goSurvey();
+}
+
+// 결과 JSON을 서버로 전송(설정된 경우). sendBeacon 우선, 실패 시(주로 페이로드가
+// 브라우저별 상한을 넘을 때) keepalive fetch로 폴백해 페이지 이동 후에도 전송이
+// 이어지게 한다. no-cors + text/plain으로 보내 CORS preflight를 피한다
+// (Apps Script는 e.postData.contents로 원문을 그대로 받아 JSON.parse 하면 됨).
+function sendResult(payload){
+    if(!UPLOAD_URL) return;
+    try{
+        const blob = new Blob([payload], {type: 'text/plain;charset=utf-8'});
+        if(navigator.sendBeacon && navigator.sendBeacon(UPLOAD_URL, blob)) return;
+    }catch(e){}
+    fetch(UPLOAD_URL, {
+        method: 'POST', mode: 'no-cors', keepalive: true,
+        headers: {'Content-Type': 'text/plain;charset=utf-8'},
+        body: payload
+    }).catch(() => {});
+}
+
+// 설문 URL에 요약값(점수·인식률·손 방향 등)을 프리필 파라미터로 붙인다.
+// FORM_ENTRY가 전부 비어 있으면 원본 FORMS_URL을 그대로 반환.
+function buildSurveyUrl(s){
+    const params = [];
+    const add = (entry, val) => { if(entry) params.push(entry + '=' + encodeURIComponent(val)); };
+    add(FORM_ENTRY.participantId, pid);
+    add(FORM_ENTRY.hand, selectedHand);
+    add(FORM_ENTRY.score, s.captcha.toFixed(3));
+    add(FORM_ENTRY.passed, s.captcha >= THRESHOLD ? '통과' : '차단');
+    add(FORM_ENTRY.detectionRate, (s.dR*100).toFixed(0) + '%');
+    if(params.length === 0) return FORMS_URL;
+    const sep = FORMS_URL.includes('?') ? '&' : '?';
+    return FORMS_URL + sep + 'usp=pp_url&' + params.join('&');
+}
+
+// ===== BOOTSTRAP (spec §7.2 step 1: 진입 → 카메라 자동 실행, 선택 단계 없음) =====
+// 시작 안내 배너: 닫기 클릭, 8초 경과, 또는 사용자가 첫 자세를 맞춰 실제로
+// 시작하면(onFirstKeyframeMatched) 사라진다. 카메라 자동 실행/즉시 진입
+// 흐름(§7.2)은 그대로 두고, 안내만 겹쳐 보여준 뒤 방해 없이 비켜준다.
+function dismissIntroBanner(){
+    const b = document.getElementById('introBanner');
+    if(b) b.classList.add('hidden');
+}
+document.getElementById('introClose').addEventListener('click', dismissIntroBanner);
+setTimeout(dismissIntroBanner, 8000);
+
+async function bootstrap(){
+    await initMP();
+    await loadPoolManifest();
+    phase = 'detecting_hand';
+    sessionStart = performance.now();
+    sessionLog = [];
+    updateMatchIndicator('waiting', '손을 비춰주세요');
+    setS('waiting', '손을 비춰주세요');
+    await initCam();
+}
+bootstrap();
+</script>
+</body>
+</html>
+</content>
