@@ -136,10 +136,15 @@ const MX = {angle:46.9413, dtw_angle:44.0014, accel:0.1926};
 const AT = [[0,5,6],[5,6,7],[6,7,8],[0,9,10],[9,10,11],[10,11,12],[0,13,14],[13,14,15],[14,15,16],[0,17,18],[17,18,19],[18,19,20],[0,1,2],[1,2,3],[2,3,4]];
 const LN = ['WRIST','THUMB_CMC','THUMB_MCP','THUMB_IP','THUMB_TIP','INDEX_MCP','INDEX_PIP','INDEX_DIP','INDEX_TIP','MIDDLE_MCP','MIDDLE_PIP','MIDDLE_DIP','MIDDLE_TIP','RING_MCP','RING_PIP','RING_DIP','RING_TIP','PINKY_MCP','PINKY_PIP','PINKY_DIP','PINKY_TIP'];
 // ===== 결과 전송 설정 =====
-// 전체 JSON 업로드용 Google Apps Script 웹앱 URL. 비워두면 업로드를 건너뛴다
-// (로컬 다운로드는 항상 유지).
+// 전체 JSON 업로드용 Google Apps Script 웹앱 URL. 비워두면 업로드를 건너뛴다.
 // Apps Script > 배포 > 새 배포 > 웹앱(액세스: 모든 사용자) 의 /exec URL을 넣을 것.
 const UPLOAD_URL = ''; // 예: 'https://script.google.com/macros/s/AKfy.../exec'
+// 결과 JSON을 로컬 파일로도 내려받을지 여부. 브라우저가 다운로드마다
+// "다른 이름으로 저장" 대화상자를 띄우도록 설정돼 있으면(엣지: 설정 > 다운로드 >
+// "다운로드 전에 각 파일을 저장할 위치 확인") 전시/키오스크 환경에서 매 회차마다
+// 진행을 막는 팝업이 뜬다. 그 설정을 끌 수 없는 환경이라면 이 값을 false로 바꿔
+// 로컬 다운로드 자체를 건너뛴다(UPLOAD_URL 서버 전송은 계속 동작).
+const SAVE_LOCAL_JSON = true;
 
 // MediaPipe Hands labels handedness assuming the input image is already
 // selfie-mirrored. This app always sends the raw (unmirrored) camera frame
@@ -907,13 +912,15 @@ function showResult(){
         sessionLog
     };
 
-    const blob = new Blob([JSON.stringify(result, null, 2)], {type: 'application/json'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `hand_captcha_${selectedHand}_${pid}_${Date.now()}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    if(SAVE_LOCAL_JSON){
+        const blob = new Blob([JSON.stringify(result, null, 2)], {type: 'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `hand_captcha_${selectedHand}_${pid}_${Date.now()}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
 
     showScr('screenResult');
 

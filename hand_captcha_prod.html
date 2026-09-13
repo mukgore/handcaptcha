@@ -143,6 +143,12 @@ const FORMS_URL = 'https://forms.gle/7D6i33xrv4fkNuX99';
 //     곧바로 설문으로 이동한다(로컬 다운로드는 항상 유지).
 //     Apps Script > 배포 > 새 배포 > 웹앱(액세스: 모든 사용자) 의 /exec URL을 넣을 것.
 const UPLOAD_URL = ''; // 예: 'https://script.google.com/macros/s/AKfy.../exec'
+// 결과 JSON을 로컬 파일로도 내려받을지 여부. 브라우저가 다운로드마다
+// "다른 이름으로 저장" 대화상자를 띄우도록 설정돼 있으면(엣지: 설정 > 다운로드 >
+// "다운로드 전에 각 파일을 저장할 위치 확인") 전시/키오스크 환경에서 매 회차마다
+// 진행을 막는 팝업이 뜬다. 그 설정을 끌 수 없는 환경이라면 이 값을 false로 바꿔
+// 로컬 다운로드 자체를 건너뛴다(UPLOAD_URL 서버 전송은 계속 동작).
+const SAVE_LOCAL_JSON = true;
 // (2) 설문(Form)에 요약값을 프리필할 entry ID 매핑. 비워둔 항목은 프리필하지 않는다.
 //     주의: 프리필은 forms.gle 단축링크가 아니라 전체 viewform URL에서만 동작하므로,
 //     프리필을 쓰려면 위 FORMS_URL을
@@ -922,13 +928,15 @@ function showResult(){
         sessionLog
     };
 
-    const blob = new Blob([JSON.stringify(result, null, 2)], {type: 'application/json'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `hand_captcha_${selectedHand}_${pid}_${Date.now()}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    if(SAVE_LOCAL_JSON){
+        const blob = new Blob([JSON.stringify(result, null, 2)], {type: 'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `hand_captcha_${selectedHand}_${pid}_${Date.now()}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
 
     showScr('screenResult');
 
