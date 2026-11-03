@@ -32,6 +32,8 @@ class PipelineConfig:
     gate_pass_frac: float = 1.00
     condition1_margin_frac: float = 0.15  # shrink radius by this fraction when checking "fully covered"
     condition2_margin_frac: float = 0.10  # grow radius by this fraction when checking "clearly outside"
+    # Stage7 v2 engineering proxy, not a validated human usability threshold.
+    condition2_min_visible_fingers: int = 2
 
     def to_dict(self):
         d = dict(self.__dict__)

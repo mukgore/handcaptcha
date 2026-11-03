@@ -24,7 +24,9 @@ def test_check_frame_conditions_passes_when_joint_covered_and_palm_visible():
     config = PipelineConfig()
     ok, detail = check_frame_conditions(lm, center=(0.0, 0.0, 0.0), radius=50.0, config=config)
     assert ok is True
-    assert detail == {"condition1": True, "condition2": True}
+    assert detail["condition1"] is True
+    assert detail["condition2"] is True
+    assert detail["visible_finger_count"] == 4
 
 
 def test_check_frame_conditions_fails_when_pip_joint_not_covered():
@@ -42,10 +44,10 @@ def test_check_frame_conditions_fails_when_pip_joint_not_covered():
     assert detail["condition1"] is False
 
 
-def test_check_frame_conditions_fails_when_palm_cue_covered():
+def test_check_frame_conditions_allows_wrist_covered_with_visible_fingertips():
     lm = _placeholder_landmarks()
     lm[P9], lm[P10], lm[P11] = (0.0, -10.0, 0.0), (0.0, 0.0, 0.0), (0.0, 10.0, 0.0)
-    lm[P0] = (10.0, 10.0, 0.0)  # too close to the mask center
+    lm[P0] = (10.0, 10.0, 0.0)  # wrist coverage is allowed in Stage7 v2
     lm[THUMB_CMC] = (180.0, 180.0, 0.0)
     lm[P5] = (150.0, -150.0, 0.0)
     lm[RING_MCP] = (-150.0, 150.0, 0.0)
@@ -53,8 +55,8 @@ def test_check_frame_conditions_fails_when_palm_cue_covered():
 
     config = PipelineConfig()
     ok, detail = check_frame_conditions(lm, center=(0.0, 0.0, 0.0), radius=50.0, config=config)
-    assert ok is False
-    assert detail["condition2"] is False
+    assert ok is True
+    assert detail["condition2"] is True
 
 
 def test_project_occlusion_circle_matches_spec_formula():
@@ -67,16 +69,9 @@ def test_project_occlusion_circle_matches_spec_formula():
     assert radius == 75.0  # dist(P0,P9)*w3_new/2 = 100*1.5/2
 
 
-def test_project_occlusion_circle_wrist_coverage_tension():
-    """Documents a spec-internal tension found while implementing Stage 6/7:
-    per the literal Stage 6 formula (center=midpoint(P0,P9),
-    diameter=dist(P0,P9)*w3_new), the wrist P0 ends up strictly INSIDE the
-    occlusion circle whenever w3_new > 1 -- which is the expected regime for
-    all three original occlusion levels (1.45/1.75/1.95). That conflicts
-    with Stage 7's condition 2 ("팔목 등 손 형태 단서가 잔존"). Flagged here
-    as a regression-tracked known issue rather than silently worked around;
-    resolve once real data clarifies intent (e.g. whether the center should
-    track further from the wrist, as the old ratio-projection did)."""
+def test_project_occlusion_circle_keeps_wrist_coverage_by_design():
+    """Stage6 is unchanged. Stage7 v2 allows this covered wrist rather than
+    rejecting every such frame because of the historical wrist-outside rule."""
     lm = _placeholder_landmarks()
     lm[P0] = (0.0, 0.0, 0.0)
     lm[P9] = (0.0, 100.0, 0.0)

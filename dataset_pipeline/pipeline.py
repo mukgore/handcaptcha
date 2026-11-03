@@ -75,6 +75,7 @@ def run_batch(video_paths, config=None, w3_new=None, output_dir=None):
                 continue
             gate = gate_clip(accepted_frames_by_clip[clip_id], w3_new, config)
             report["stage7"] = {
+                "policy_version": gate["policy_version"],
                 "accepted": gate["accepted"],
                 "pass_frac": gate["pass_frac"],
                 "failing_frame_idxs": gate["failing_frame_idxs"],

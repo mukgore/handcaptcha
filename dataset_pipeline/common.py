@@ -32,5 +32,9 @@ OPEN_HAND_JOINTS = [
 # Spec §9 Stage 7 condition 1 (middle finger first-joint coverage) proxy points.
 CONDITION1_POINTS = [P10]  # extended with midpoints of (P9,P10) and (P10,P11) in stage7_gate.py
 
-# Spec §9 Stage 7 condition 2 (palm/wrist cues must remain visible) landmark set.
+# Historical v1 cue set, kept for interpreting old reports only.
 PALM_CUE_INDICES = [P0, THUMB_CMC, P5, RING_MCP, P17]
+
+# Stage7 v2 counts distinct non-target fingertips outside the mask.
+VISIBLE_FINGER_TIPS = {"thumb": THUMB_TIP, "index": INDEX_TIP,
+                       "ring": RING_TIP, "pinky": PINKY_TIP}
