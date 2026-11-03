@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from dataset_pipeline.common import P0, THUMB_CMC, P5, RING_MCP, P17, P9, P10, P11
 from dataset_pipeline.config import PipelineConfig
-from dataset_pipeline.geometry import dist
+import math
 from dataset_pipeline.stage6_occlusion import project_occlusion_circle
 from dataset_pipeline.stage7_gate import check_frame_conditions
 
@@ -63,7 +63,7 @@ def test_project_occlusion_circle_matches_spec_formula():
     lm[P9] = (0.0, 100.0, 0.0)
 
     center, radius = project_occlusion_circle(lm, w3_new=1.5)
-    assert center == (0.0, 50.0, 0.0)
+    assert center == (0.0, 50.0)
     assert radius == 75.0  # dist(P0,P9)*w3_new/2 = 100*1.5/2
 
 
@@ -82,4 +82,4 @@ def test_project_occlusion_circle_wrist_coverage_tension():
     lm[P9] = (0.0, 100.0, 0.0)
 
     center, radius = project_occlusion_circle(lm, w3_new=1.95)
-    assert dist(lm[P0], center) < radius
+    assert math.dist(lm[P0][:2], center) < radius

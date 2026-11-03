@@ -8,8 +8,9 @@ designed fresh from the plain-English spec definitions:
 Per-frame AND of both conditions; per-clip gate requires 100% of frames to
 pass (spec §5).
 """
+import math
+
 from dataset_pipeline.common import P9, P10, P11, PALM_CUE_INDICES
-from dataset_pipeline.geometry import dist, midpoint
 from dataset_pipeline.stage1_extract import frame_points
 from dataset_pipeline.stage6_occlusion import project_occlusion_circle
 
@@ -21,12 +22,16 @@ def check_frame_conditions(image_lm_px, center, radius, config):
     condition2: a fixed palm-cue landmark set spanning the palm's outer
     boundary must all lie outside radius grown by condition2_margin_frac."""
     p9, p10, p11 = image_lm_px[P9], image_lm_px[P10], image_lm_px[P11]
-    condition1_points = [p10, midpoint(p9, p10), midpoint(p10, p11)]
+    # Image z is relative depth, whereas center/radius describe a 2D raster.
+    # A geometry gate must use the same x/y coordinates as the rendered mask.
+    middle = lambda a, b: ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
+    distance = lambda p: math.dist(p[:2], center[:2])
+    condition1_points = [p10, middle(p9, p10), middle(p10, p11)]
     inner_radius = radius * (1 - config.condition1_margin_frac)
-    condition1 = all(dist(pt, center) <= inner_radius for pt in condition1_points)
+    condition1 = all(distance(pt) <= inner_radius for pt in condition1_points)
 
     outer_radius = radius * (1 + config.condition2_margin_frac)
-    condition2 = all(dist(image_lm_px[i], center) >= outer_radius for i in PALM_CUE_INDICES)
+    condition2 = all(distance(image_lm_px[i]) >= outer_radius for i in PALM_CUE_INDICES)
 
     return condition1 and condition2, {"condition1": condition1, "condition2": condition2}
 
@@ -36,12 +41,15 @@ def gate_clip(frames, w3_new, config):
     failing_frame_idxs = []
     for f in frames:
         pts = frame_points(f, "px")
+        total += 1
         if pts is None:
             failing_frame_idxs.append(f.get("frame_idx"))
             continue
-        center, radius = project_occlusion_circle(pts, w3_new)
-        ok, _detail = check_frame_conditions(pts, center, radius, config)
-        total += 1
+        try:
+            center, radius = project_occlusion_circle(pts, w3_new)
+            ok, _detail = check_frame_conditions(pts, center, radius, config)
+        except (ValueError, IndexError, TypeError):
+            ok = False
         if ok:
             passed += 1
         else:
