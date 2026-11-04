@@ -12,4 +12,4 @@
 
 선택/관문/phase/중단/완료 event는 메모리에 최대1000개 기록하며 버튼으로만 JSON 저장한다. 저장본은 정책과 상대 페이지 시각/이벤트이며 영상/좌표/참가자 ID를 새로 복사하지 않는다. 기존 prod의 원래 결과/점수/설정된 전송 계약은 유지된다. 손 면 자동 판정 성공이나 사람/공격 성능으로 기록하지 않는다.
 
-Node 연결 검사: `node --test experiments/prod_selected_hand/bridge.test.cjs`. 실제 카메라/모델을 실행한 사람 실험은 별도다. 생성본의 score 수학이 기준과 같은지도 빌드 변경 때 함께 확인한다.
+Node 연결/실제 생성 HTML async 검사: `node --test experiments/prod_selected_hand/bridge.test.cjs experiments/prod_selected_hand/async.test.cjs`. 9개를 통과했다. 실제 카메라/모델을 실행한 사람 실험은 별도다. 생성본의 score 수학이 기준과 같은지도 빌드 변경 때 함께 확인한다.
