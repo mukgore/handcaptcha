@@ -5,7 +5,7 @@
 `index_flex`, `middle_flex`, `alternating`의 세 가지 정해진 동작을 forward kinematics로 만든다. seed는 굽힘 진폭을 바꾸고, 정사영으로 512×420 영상을 렌더한다. 원본 영상의 decoder 시각을 다시 기록한 다음 Stage7 v2와 **수정하지 않은 Stage6**를 거쳐 연구 후보 MP4를 만든다. 동일 recipe는 같은 좌표를 만들지만 영상 인코딩 byte의 환경 간 동일성은 보장하지 않는다.
 
 ```powershell
-python -m experiments.motion_fixture.generate --output pipeline_output/authored_fixture_run1 --template middle_flex --seed 7 --w3 2.5 --frames 24 --fps 12
+python -m experiments.motion_fixture.generate --output ../private_artifacts/authored_fixture_run1 --template middle_flex --seed 7 --w3 2.5 --frames 24 --fps 12
 ```
 
 새 폴더만 사용하며 기존 출력은 덮어쓰지 않는다. `w3=2.5`, 12fps, 24frame은 연결 시험 예시로, 실제 연구 조건이나 사람에게 검증된 기준이 아니다. FPS는 1~60, frame 수는 3~240으로 제한한다. 기존 NumPy/OpenCV 외에 모델·데이터·패키지를 설치하지 않는다.

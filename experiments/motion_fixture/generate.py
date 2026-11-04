@@ -16,6 +16,7 @@ from dataset_pipeline.candidate import build_candidate
 from dataset_pipeline.common import LANDMARK_NAMES
 from dataset_pipeline.config import PipelineConfig
 from dataset_pipeline.stage7_gate import gate_clip
+from dataset_pipeline.storage import private_output
 
 VERSION = 'authored_3d_hand_fixture_v1'
 TEMPLATES = ('index_flex','middle_flex','alternating')
@@ -82,6 +83,7 @@ def draw_frame(frame):
 
 
 def build_fixture(output,*,template,seed,w3_new,frames=24,fps=12.):
+    output = private_output(output)
     if isinstance(w3_new,bool) or not isinstance(w3_new,(int,float)) or not math.isfinite(w3_new) or w3_new<=0:
         raise ValueError('Explicit finite positive mask multiplier required')
     records=generate_motion(template,seed,frames,fps)

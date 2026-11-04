@@ -58,7 +58,7 @@ def main():
 
     p_run = sub.add_parser("run", help="Stage 1-7 파이프라인 실행")
     p_run.add_argument("clips", nargs="+", help="클립 경로 또는 glob 패턴")
-    p_run.add_argument("--output", default="pipeline_output")
+    p_run.add_argument("--output", default="../private_artifacts/pipeline_output")
     p_run.add_argument("--config", default=None, help="PipelineConfig 오버라이드 JSON 파일")
     p_run.add_argument("--w3", type=float, default=None, help="w3_new를 직접 지정(생략 시 배치에서 재추정)")
     p_run.add_argument("--report-only", action="store_true", help="기하 후보 보고서만 작성하고 영상은 생성하지 않음")

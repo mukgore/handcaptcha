@@ -5,7 +5,7 @@ Stage6 수식/파일은 유지한다. `timeline.py`와 `candidate.py`가 필터�
 ## 실행
 
 ```powershell
-python -m dataset_pipeline.cli run "private_clips/*.mp4" --w3 1.95 --output pipeline_output/run_001
+python -m dataset_pipeline.cli run "private_clips/*.mp4" --w3 1.95 --output ../private_artifacts/pipeline_output/run_001
 ```
 
 `1.95`는 예시 값이며 검증된 공통 기준이 아니다. 연구자가 고정한 값을 사용하거나 개발 자료만으로 추정한다. CLI 기본 실행은 Stage7 통과 후보의 실제 MP4를 만든다. 기존 보고서만 필요하면 `--report-only`를 사용한다. Python API `run_batch`는 호환성을 위해 `render_candidates=False`가 기본이다.

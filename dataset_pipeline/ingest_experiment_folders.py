@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 
 from dataset_pipeline.pipeline import run_batch
+from dataset_pipeline.storage import private_output
 
 
 def _validate(directory, clip_id, output, weight):
@@ -18,7 +19,7 @@ def _validate(directory, clip_id, output, weight):
     source = Path(directory) / 'baseline_original.mp4'
     if not source.is_file():
         raise FileNotFoundError(source)
-    target = Path(output)
+    target = private_output(output)
     if target.exists():
         raise FileExistsError('Refusing to overwrite an existing intake or serving pool')
     return source, target
@@ -66,7 +67,7 @@ def ingest_many(experiment_dirs_with_ids, output_dir=None, *, w3_new=None, confi
     rows = list(experiment_dirs_with_ids)
     if not rows or output_dir is None:
         raise ValueError('Sources and explicit new private output required')
-    root = Path(output_dir)
+    root = private_output(output_dir)
     if root.exists():
         raise FileExistsError('Refusing to overwrite existing output')
     ids = [row[1] for row in rows]

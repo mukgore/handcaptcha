@@ -15,10 +15,12 @@ import cv2
 from dataset_pipeline.stage6_occlusion import generate_occluded_video
 from dataset_pipeline.stage7_gate import gate_clip
 from dataset_pipeline.timeline import build_frame_map
+from dataset_pipeline.storage import private_output
 
 
 def build_candidate(video_path, frames, info, w3_new, config, output_root,
                     *, max_cache_bytes=256 * 1024 * 1024, max_output_frames=20000):
+    output_root = private_output(output_root)
     if len(frames) > max_output_frames:
         raise ValueError('Output frame count exceeds candidate build budget')
     timeline = build_frame_map(frames, info)

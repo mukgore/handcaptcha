@@ -19,6 +19,7 @@ from dataset_pipeline.stage4_length_norm import length_normalize, final_length_s
 from dataset_pipeline.stage5_weights import estimate_weights
 from dataset_pipeline.stage7_gate import gate_clip
 from dataset_pipeline.candidate import build_candidate
+from dataset_pipeline.storage import private_output
 
 
 def process_clip(video_path, config):
@@ -54,6 +55,8 @@ def process_clip(video_path, config):
 
 
 def run_batch(video_paths, config=None, w3_new=None, output_dir=None, *, render_candidates=False):
+    if output_dir is not None:
+        output_dir = str(private_output(output_dir))
     config = config or PipelineConfig()
     video_paths = list(video_paths)
     paths_by_id = {os.path.basename(p): p for p in video_paths}

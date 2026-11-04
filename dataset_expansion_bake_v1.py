@@ -11,11 +11,12 @@ from pathlib import Path
 import cv2
 
 from dataset_pipeline.pipeline import run_batch
+from dataset_pipeline.storage import private_output
 
 
 def bake_adopted(adopted_path, source_root, output_dir, w3_new):
     root = Path(source_root).resolve(strict=True)
-    output = Path(output_dir)
+    output = private_output(output_dir)
     if output.exists():
         raise FileExistsError('Use a new private output directory')
     if isinstance(w3_new, bool) or not isinstance(w3_new, (int, float)) or not math.isfinite(w3_new) or w3_new <= 0:

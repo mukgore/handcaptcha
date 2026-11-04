@@ -10,7 +10,7 @@
 
 ## 기존 별도 bake 경로
 
-root의 dataset_expansion_bake_v1.py도 같은 연구 파이프라인을 사용하도록 전환했다. import 시 설치·파일 읽기·렌더를 실행하지 않는다. `python dataset_expansion_bake_v1.py --adopted adopted_clips.json --source-root PRIVATE_ROOT --output pipeline_output/new_bake --w3 실제값`으로 실행한다.
+root의 dataset_expansion_bake_v1.py도 같은 연구 파이프라인을 사용하도록 전환했다. import 시 설치·파일 읽기·렌더를 실행하지 않는다. `python dataset_expansion_bake_v1.py --adopted adopted_clips.json --source-root PRIVATE_ROOT --output ../private_artifacts/new_bake --w3 실제값`으로 실행한다.
 
 mapping의 각 key는 원본 video 상대 경로이며 info.fps를 명시해야 한다. 실제 영상 FPS와 대조하고 기존 circle만 재사용하지 않는다. 원본을 다시 추출·검사해 현재 Stage6 수식으로 굽는다. 결과는 연구 후보이며 운영 배포 승인이 아니다. 이전 출력의 비검증 H264 재인코딩/자동 배포 안내도 제거했다. 브라우저용 rendition은 별도 검사·승격 대상이다.
 
