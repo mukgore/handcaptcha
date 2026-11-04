@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>기존 prod 기반 손바닥 안내 비교</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f8f9fb;color:#1e293b;font-family:system-ui,sans-serif}main{max-width:1600px;margin:auto;padding:24px}h1{font-size:22px;margin:0 0 10px}p{line-height:1.6;font-size:14px;color:#475569}nav{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0}button,a{font:inherit}nav button{border:1px solid #cbd5e1;background:white;padding:10px 16px;border-radius:8px;cursor:pointer}nav button[aria-pressed=true]{background:#2563eb;color:white;border-color:#2563eb}.meta{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:12px 0}h2{font-size:17px;margin:0}.meta a{color:#2563eb;font-size:13px}iframe{display:block;width:100%;height:740px;border:1px solid #e2e8f0;border-radius:12px;background:white}.description{min-height:24px;margin:8px 0 14px}#loadError{color:#b91c1c}footer{font-size:12px;color:#64748b;margin:14px 0}@media(max-width:768px){main{padding:12px}h1{font-size:18px}iframe{height:760px}.meta{align-items:flex-start;flex-direction:column;gap:8px}nav button{padding:8px 11px;font-size:13px}}
+</style></head><body><main>
+<h1>기존 hand_captcha_prod 기반 수정안</h1>
+<p>기존 목표 자세·카메라 2패널, 진행 점, 상태 표시를 그대로 사용합니다. 아래 미리보기는 비교를 위해 예시 손 그림을 표시하며 카메라와 모델을 실행하지 않습니다.</p>
+<nav aria-label="수정안 선택"><button data-version="original" aria-pressed="true">기존 화면</button><button data-version="a_copy" aria-pressed="false">A · 문구 강화</button><button data-version="b_compare" aria-pressed="false">B · 비교 그림</button><button data-version="c_guide" aria-pressed="false">C · 기존 가이드 손금</button></nav>
+<div class="meta"><h2 id="versionTitle">기존 화면</h2><a id="liveLink" href="../../hand_captcha_prod.html" target="_blank" rel="noopener">이 버전 직접 열기 · 카메라 사용</a></div>
+<p class="description" id="description">원래 화면 구성을 비교 기준으로 보여 줍니다.</p>
+<p id="loadError" hidden></p><iframe id="preview" title="기존 prod 기반 UI 미리보기" sandbox="allow-scripts allow-same-origin"></iframe>
+<footer>미리보기의 자세·손 그림은 실제 문제나 촬영 결과가 아닙니다. 직접 열기는 기존 prod 동작을 실행하며 카메라 허용은 사용자가 선택합니다.</footer>
+</main><script src="preview.js"></script></body></html>
