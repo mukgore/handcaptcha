@@ -4,37 +4,75 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>손 선택 · 중첩 안내 실험</title>
 <style>
-body{margin:0;background:#102032;color:#edf3f8;font:16px/1.6 system-ui,sans-serif}
-main{max-width:1060px;margin:auto;padding:24px} h1{font-size:26px;margin:0 0 8px}
+*{box-sizing:border-box}body{margin:0;background:#102032;color:#edf3f8;font:16px/1.6 system-ui,sans-serif}
+main{width:100%;min-width:0;max-width:1108px;margin:auto;padding:24px} h1{font-size:26px;margin:0 0 8px}
+h1,h2,p,strong{overflow-wrap:anywhere}
 .controls{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin:20px 0}
 button,select,input{font:inherit}button{padding:8px 16px;border:0;border-radius:6px;cursor:pointer}
-button:disabled{opacity:.5;cursor:default}.panels{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-figure{margin:0;background:#080f18;border:1px solid #446079;border-radius:8px;overflow:hidden}
+button:disabled{opacity:.5;cursor:default}.panels{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+figure{margin:0;min-width:0;background:#080f18;border:1px solid #446079;border-radius:8px;overflow:hidden}
 canvas{width:100%;height:auto;display:block}figcaption{padding:8px 12px}
 #cameraSource,#referenceSource{display:none}#status{padding:12px;background:#243d53;border-radius:6px}
 .overlay .panels{grid-template-columns:1fr}.overlay #referencePanel{display:none}
-small{color:#b9cddd}label{display:inline-flex;gap:7px;align-items:center}
-@media(max-width:650px){.panels{grid-template-columns:1fr}main{padding:16px}}
+small{color:#b9cddd}label{display:inline-flex;max-width:100%;gap:7px;align-items:center}
+.controls label{flex-wrap:wrap}input[type=file]{width:260px;max-width:100%}
+.palm-guide{border:1px solid #54758a;border-radius:14px;padding:18px;background:#172d40;margin:20px 0}
+.palm-guide h2{margin:0;font-size:21px}.guide-cards{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:14px;margin:14px 0}
+.guide-card{min-width:0;padding:14px;border-radius:12px;text-align:center;background:#203e50;border:1px solid #77cbb2}
+.guide-card.back{background:#26333e;border-color:#8093a0}.guide-card p{margin:4px 0}
+.hand-diagram{display:block;width:112px;max-width:100%;height:148px;margin:8px auto}.back .hand-diagram{width:84px;height:112px}
+.hand-shape{fill:#e7b88e;stroke:#f7d8b8;stroke-width:3}.crease{fill:none;stroke:#885d40;stroke-width:3;stroke-linecap:round}
+.nail{fill:#eed5bf;stroke:#9e8069;stroke-width:1.5}.left-hand .hand-diagram{transform:scaleX(-1)}
+.steps{display:flex;gap:18px;flex-wrap:wrap;padding:0;list-style:none;color:#cde8ee;counter-reset:steps}
+.steps li{counter-increment:steps;display:flex;align-items:center;gap:8px}
+.steps li::before{content:counter(steps);display:inline-grid;place-items:center;width:25px;height:25px;border-radius:50%;background:#315369}
+.affirm{padding:12px;border-radius:8px;background:#244656}.affirm label{align-items:flex-start}
+.affirm input{flex-shrink:0;margin-top:7px}
+button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:3px solid #ffce69;outline-offset:3px}
+button.primary{background:#b8f1dc;color:#102b25;font-weight:700}button.secondary{background:#d2e2ed;color:#162f41}
+#preparation[hidden]{display:none}.log-note{margin-top:24px}summary{cursor:pointer}
+@media(max-width:650px){.panels{grid-template-columns:minmax(0,1fr)}main{padding:16px}.guide-cards{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.guide-card{padding:10px;font-size:14px}}
 </style>
 <main>
-<h1>가장 큰 손으로 시작하기 · 화면 안내 비교</h1>
-<p>가려진 영상의 손모양과 움직임을 따라 해 보세요. 초록 테두리가 현재 선택한 손입니다.</p>
+<h1>손바닥을 보여 주고, 움직임을 따라 하세요</h1>
+<p><strong>손금이 보이는 쪽을 카메라 렌즈로 향해 주세요.</strong> 초록 테두리는 현재 선택한 손입니다.</p>
 <p><small>개발용 시연입니다. 채점·인증·자료 전송을 하지 않습니다. 원본 카메라는 손 검출에만 사용하고 문제 영상은 화면에만 겹칩니다.</small></p>
+<ol class="steps"><li>가림 완료 영상 선택</li><li>카메라로 손바닥 준비</li><li>움직임 시작</li></ol>
+<div class="controls"><label>가림 완료 영상 <input id="media" type="file" accept="video/mp4,video/webm"></label></div>
+<section id="preparation" class="palm-guide" aria-labelledby="palmTitle">
+<h2 id="palmTitle">먼저, 카메라에 보일 손의 면을 확인해 주세요</h2>
+<div class="guide-cards">
+<div class="guide-card"><strong>보여 줄 쪽 · 손바닥</strong>
+<svg class="hand-diagram" viewBox="0 0 140 180" role="img" aria-label="손금이 보이는 열린 손바닥">
+<path class="hand-shape" d="M49 171 L44 144 C32 133 20 111 11 95 C6 85 8 78 14 77 C20 77 25 89 34 98 L34 37 C34 26 47 26 48 37 L49 81 L49 19 C49 7 64 7 64 19 L65 78 L65 14 C65 2 80 2 80 14 L81 78 L81 26 C81 14 96 14 96 26 L96 82 L98 49 C98 37 112 38 111 51 L110 109 C109 132 101 141 96 148 L94 171 Z"/>
+<path class="crease" d="M44 105 Q70 87 95 99 M51 122 Q74 109 99 118 M43 103 Q55 126 56 146"/>
+</svg><p>손금이 보이는 쪽을 렌즈로</p></div>
+<div class="guide-card back"><strong>비교 · 손등</strong>
+<svg class="hand-diagram" viewBox="0 0 140 180" role="img" aria-label="손톱이 보이는 손등 비교 그림">
+<path class="hand-shape" d="M49 171 L44 144 C32 133 20 111 11 95 C6 85 8 78 14 77 C20 77 25 89 34 98 L34 37 C34 26 47 26 48 37 L49 81 L49 19 C49 7 64 7 64 19 L65 78 L65 14 C65 2 80 2 80 14 L81 78 L81 26 C81 14 96 14 96 26 L96 82 L98 49 C98 37 112 38 111 51 L110 109 C109 132 101 141 96 148 L94 171 Z"/>
+<rect class="nail" x="37" y="32" width="8" height="12" rx="3"/><rect class="nail" x="53" y="15" width="8" height="12" rx="3"/><rect class="nail" x="69" y="10" width="8" height="12" rx="3"/><rect class="nail" x="85" y="22" width="8" height="12" rx="3"/><rect class="nail" x="101" y="44" width="7" height="12" rx="3"/>
+</svg><p>손톱이 보이면 손목을 편하게 돌려 주세요</p></div>
+</div>
+<p><small>준비 중에는 문제 영상을 재생하지 않습니다. 아래 카메라에서 손의 면을 확인한 뒤 시작하세요.</small></p>
+<label>안내 그림 <select id="guideHand"><option value="right">오른손</option><option value="left">왼손</option></select></label>
+<p class="affirm"><label><input id="palmConfirmed" type="checkbox" disabled>손금이 보이는 쪽을 카메라 렌즈로 향했습니다.</label></p>
+<p><small>이 확인은 직접 하는 준비 확인입니다. 손바닥 방향을 자동 판정한 결과가 아닙니다.</small></p>
+</section>
 <div class="controls">
 <label>화면 <select id="mode"><option value="split">분리 화면</option><option value="overlay">중첩 화면</option></select></label>
 <label>문제 투명도 <input id="opacity" type="range" min="0.15" max="0.8" step="0.05" value="0.4"></label>
 <label><input id="mirror" type="checkbox">문제 좌우 반전</label>
-<label>가림 완료 영상 <input id="media" type="file" accept="video/mp4,video/webm"></label>
 </div>
-<div class="controls"><button id="start" disabled>카메라 켜고 시작</button><button id="reset">손 다시 선택 · 처음부터</button></div>
+<div class="controls"><button id="start" class="secondary" disabled>카메라로 손바닥 준비</button><button id="begin" class="primary" disabled>움직임 시작</button><button id="finish" disabled>이번 시연 종료</button><button id="reset">다시 준비</button></div>
 <p id="status" role="status" aria-live="polite">비교할 가림 완료 영상을 먼저 선택해 주세요. 영상은 이 기기에서만 읽습니다.</p>
 <div class="panels">
 <figure><canvas id="camera" width="640" height="480"></canvas><figcaption>내 카메라 · 선택한 손</figcaption></figure>
 <figure id="referencePanel"><canvas id="reference" width="640" height="480"></canvas><figcaption>가려진 문제 · 보이는 움직임 따라 하기</figcaption></figure>
 </div>
-<p><small>손이 사라지거나 두 손의 연결이 모호해지면 이번 시연을 멈춥니다. ‘손 다시 선택’을 누르면 영상과 선택 기록을 초기화합니다. 가장 큰 손은 신원 확인 기준이 아닙니다. 선택 기본값과 실제 사용성은 아직 검증하지 않았습니다.</small></p>
+<p><small>손이 사라지거나 두 손의 연결이 모호해지면 이번 시연을 멈춥니다. ‘다시 준비’를 누르면 영상 재생과 손 선택을 처음부터 준비합니다. 가장 큰 손은 신원 확인 기준이 아닙니다. 선택 기본값과 실제 사용성은 아직 검증하지 않았습니다.</small></p>
+<details class="log-note"><summary>시연 기록 보기·내려받기</summary><p>준비·손 선택·자가 확인·시작·중단의 상대시간만 이 페이지 메모리에 기록합니다. 영상·손 좌표·파일명은 기록하지 않습니다. 자동 저장·전송 없이 버튼을 누를 때만 JSON 파일을 만듭니다. 다시 준비한 이력도 포함되며 페이지를 닫으면 메모리 기록은 사라집니다.</p><button id="exportLog">기기 내 기록 내려받기</button></details>
 <video id="cameraSource" playsinline muted></video><video id="referenceSource" playsinline muted loop></video>
 </main>
 <script src="https://unpkg.com/@mediapipe/hands@0.4.1675469240/hands.js"></script>
-<script src="selection.js"></script><script src="demo.js"></script>
+<script src="selection.js"></script><script src="session_log.js"></script><script src="demo.js"></script>
 </html>

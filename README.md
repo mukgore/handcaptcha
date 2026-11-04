@@ -1,5 +1,7 @@
 **<손 동작 추정 기반 CAPTCHA>**
 
+새 [연구 후보 영상 생성](dataset_pipeline/CANDIDATE_BUILD.md)은 필터/역재생 frame 대응과 Stage6 출력 검사를 연결합니다. [손바닥 안내 시연](experiments/hand_selection/README.md)은 손금 문구·앞뒤 비교 그림·재생 전 카메라 준비 단계를 제공합니다.
+
 후속 작업은 [ROADMAP.md](ROADMAP.md)와 [두 저장소 통합 목록](https://github.com/mukgore/codex/blob/work/todo-consolidation-20261103/docs/backlog_2026-11-03.md)에서 확인할 수 있습니다. 큰 손 선택·중첩 화면의 별도 개발 시연은 [experiments/hand_selection](experiments/hand_selection/README.md)에 있습니다. 기존 prod의 채점·인증 흐름과는 연결하지 않았습니다.
 
 `dataset_pipeline`의 accepted는 기하 후보 판정이며 운영 승인 풀이 아닙니다. Stage6은 누락/시간축 불일치 시 출력을 중단하고 재디코딩한 개수·크기·가림 내부를 검사합니다. 권리, 해부학적 가림, PTS/VFR, 정답 누출, 사용자/공격 성능과 전체 release gate는 별도 검증입니다. 공개 시제품의 영상/landmark와 화면 통과를 실제 서버 인증으로 취급하지 마세요.

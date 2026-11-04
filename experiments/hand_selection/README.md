@@ -2,14 +2,16 @@
 
 기존 prod와 분리된 개발용 시연이다. 점수·관문·인증·자동 저장·업로드를 하지 않는다. MediaPipe Hands의 기존 고정 CDN 버전을 로드하고 원본 카메라에서 최대 2개 손을 검출한다. 원본 카메라 입력과 가린 문제 영상의 화면 합성을 분리한다.
 
-저장소 루트에서 `python -m http.server 8765 --bind 127.0.0.1`을 실행하고 `http://127.0.0.1:8765/experiments/hand_selection/`를 연다. 가림 완료 영상 MP4/WebM을 로컬 파일 선택기로 고른다. 분리/중첩, 투명도, 문제 반전 조건을 정하고 카메라 시작을 누른다. 카메라 허용은 사용자가 수행한다. 영상은 브라우저의 blob URL로 읽고 전송하지 않는다. 검출기 모델 다운로드에는 네트워크가 필요하다.
+저장소 루트에서 `python -m http.server 8765 --bind 127.0.0.1`을 실행하고 `http://127.0.0.1:8765/experiments/hand_selection/`를 연다. 가림 완료 영상 MP4/WebM을 고르고 분리/중첩·투명도·문제 반전을 설정한다. **카메라로 손바닥 준비**를 눌러 손금 쪽을 렌즈로 보이고 안정적으로 선택된 손을 확인한다. 직접 확인 체크 후 **움직임 시작**을 누르면 문제를 재생한다. 준비 중에는 문제 재생/중첩이 없다. 카메라 허용은 사용자가 수행한다. 영상은 blob URL로 읽고 전송하지 않는다. 검출기 모델 다운로드에는 네트워크가 필요하다.
 
-가장 큰 유효 bbox를 8 callback 동안 안정화한 뒤 위치·크기·상대 형태의 연속성으로 유지한다. 유효한 21개 x/y/z 좌표와 화면 안 x/y, 양의 면적을 요구한다. 비슷한 면적의 두 손은 초기 선택을 미루며, 선택 후 소실/모호성은 즉시 중단한다. 재선택은 전체 페이지·시도를 초기화한다. 가까운 다른 사람의 손이 선택되거나 유사한 손으로 오연결될 가능성은 남으므로 신원 확인으로 쓰지 않는다.
+가장 큰 유효 bbox를 8 callback 동안 안정화한 뒤 위치·크기·상대 형태의 연속성으로 유지한다. 유효한 21개 x/y/z 좌표와 화면 안 x/y, 양의 면적을 요구한다. 비슷한 크기는 선택을 미루고, 선택 후 소실/모호성은 중단한다. **다시 준비**는 손 선택·확인·재생을 초기화하고 새 trial 번호를 부여한다. 가까운 다른 사람의 손이나 유사 손으로 오연결될 가능성은 남으므로 신원 확인으로 쓰지 않는다.
+
+손금 기준 문구·손바닥/손등 비교 그림·재생 전 준비 단계의 세 안내를 구현했다. 좌우손 선택은 그림을 바꾸는 조작이며 실제 손 방향 판정이 아니다. 확인 체크도 사용자 자가 보고다. `session_log.js`는 상대시간/허용 이벤트만 메모리에 최대 1,000개 기록하고 명시적 버튼으로만 내려받는다. 영상·좌표·파일명·참가자 ID를 받지 않으며 자동 저장/업로드는 없다.
 
 `selection.js`의 모든 기본값은 공학 초기값이며 검증된 연구/운영 기준이 아니다. 손가락 펼침·부분 잘림·fps·빠른 동작에 민감할 수 있다. 짧은 자동 재연결과 prod timer/coverage/채점 통합은 구현하지 않았다. 실제 카메라·기기/레이아웃·사용성 검증 전이다.
 
 ```powershell
-node --test experiments/hand_selection/selection.test.cjs experiments/hand_selection/demo.test.cjs
+node --test experiments/hand_selection/selection.test.cjs experiments/hand_selection/demo.test.cjs experiments/hand_selection/session_log.test.cjs
 ```
 
 전체 요구사항과 평가 카드는 [codex 통합 목록](https://github.com/mukgore/codex/blob/work/todo-consolidation-20261103/docs/backlog_2026-11-03.md)에 있다.
