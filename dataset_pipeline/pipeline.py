@@ -18,6 +18,7 @@ from dataset_pipeline.stage3_frontality import apply_frontality_filter
 from dataset_pipeline.stage4_length_norm import length_normalize, final_length_sec
 from dataset_pipeline.stage5_weights import estimate_weights
 from dataset_pipeline.stage7_gate import gate_clip
+from dataset_pipeline.candidate import build_candidate
 
 
 def process_clip(video_path, config):
@@ -29,6 +30,7 @@ def process_clip(video_path, config):
     quality = apply_quality_filter(frames, config)
     report = {
         "clip_id": clip_id,
+        "video_info": {k: info[k] for k in ('width', 'height', 'fps', 'total_frames')},
         "stage2": {"dropped_frac": quality["dropped_frac"], "accepted": quality["accepted"]},
     }
     if not quality["accepted"]:
@@ -51,8 +53,14 @@ def process_clip(video_path, config):
     return report, extended
 
 
-def run_batch(video_paths, config=None, w3_new=None, output_dir=None):
+def run_batch(video_paths, config=None, w3_new=None, output_dir=None, *, render_candidates=False):
     config = config or PipelineConfig()
+    video_paths = list(video_paths)
+    paths_by_id = {os.path.basename(p): p for p in video_paths}
+    if len(paths_by_id) != len(video_paths):
+        raise ValueError('Duplicate source basenames are ambiguous; use unique clip names')
+    if render_candidates and not output_dir:
+        raise ValueError('Candidate rendering requires a private output directory')
     clip_reports = []
     accepted_frames_by_clip = {}
 
@@ -67,7 +75,7 @@ def run_batch(video_paths, config=None, w3_new=None, output_dir=None):
         weights_report = estimate_weights(list(accepted_frames_by_clip.values()), config)
         w3_new = weights_report.get("w3_new")
 
-    manifest = []
+    manifest, artifacts = [], []
     if w3_new is not None:
         for report in clip_reports:
             clip_id = report["clip_id"]
@@ -82,9 +90,22 @@ def run_batch(video_paths, config=None, w3_new=None, output_dir=None):
             }
             report["final_status"] = "accepted" if gate["accepted"] else "discarded_stage7"
             if gate["accepted"]:
+                if render_candidates:
+                    try:
+                        artifact = build_candidate(paths_by_id[clip_id], accepted_frames_by_clip[clip_id],
+                                                   report['video_info'], w3_new, config,
+                                                   os.path.join(output_dir, 'artifacts'))
+                        artifacts.append({'clip_id': clip_id, **artifact})
+                        report['artifact'] = artifact
+                        report['final_status'] = 'artifact_verified_research'
+                    except (ValueError, OSError) as error:
+                        report['final_status'] = 'quarantined_render'
+                        report['artifact_error'] = str(error)
+                        continue
                 manifest.append(clip_id)
 
-    result = {"clip_reports": clip_reports, "weights_report": weights_report, "manifest": manifest}
+    result = {"clip_reports": clip_reports, "weights_report": weights_report, "manifest": manifest,
+              "artifacts": artifacts, "manifest_scope": 'research_artifacts' if render_candidates else 'geometry_only'}
 
     if output_dir:
         os.makedirs(output_dir, exist_ok=True)
@@ -94,6 +115,7 @@ def run_batch(video_paths, config=None, w3_new=None, output_dir=None):
             with open(os.path.join(output_dir, "weights_report.json"), "w", encoding="utf-8") as fh:
                 json.dump(weights_report, fh, ensure_ascii=False, indent=2)
         with open(os.path.join(output_dir, "manifest.json"), "w", encoding="utf-8") as fh:
-            json.dump({"accepted_clips": manifest}, fh, ensure_ascii=False, indent=2)
+            json.dump({"accepted_clips": manifest, "scope": result['manifest_scope'],
+                       "release_allowed": False, "artifacts": artifacts}, fh, ensure_ascii=False, indent=2)
 
     return result

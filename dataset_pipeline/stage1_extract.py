@@ -6,6 +6,7 @@ landmarks (needed later in Stage 6 to actually draw a mask on the frame).
 """
 import cv2
 import mediapipe as mp
+import math
 
 from dataset_pipeline.common import LANDMARK_NAMES
 
@@ -21,44 +22,54 @@ def extract_landmarks(video_path, confidence=0.5):
     total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     info = {"width": width, "height": height, "fps": fps, "total_frames": total, "source": video_path}
 
-    mp_hands = mp.solutions.hands
-    hands = mp_hands.Hands(
-        static_image_mode=False,
-        max_num_hands=1,
-        min_detection_confidence=confidence,
-        min_tracking_confidence=confidence,
-    )
+    hands = None
+    try:
+        mp_hands = mp.solutions.hands
+        hands = mp_hands.Hands(
+            static_image_mode=False,
+            max_num_hands=1,
+            min_detection_confidence=confidence,
+            min_tracking_confidence=confidence,
+        )
 
-    frames = []
-    idx = 0
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        result = hands.process(rgb)
+        frames = []
+        idx = 0
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            result = hands.process(rgb)
 
-        entry = {"frame_idx": idx, "detected": False, "confidence": None}
-        if result.multi_hand_landmarks and result.multi_hand_world_landmarks:
-            image_lm = result.multi_hand_landmarks[0]
-            world_lm = result.multi_hand_world_landmarks[0]
-            entry["detected"] = True
-            entry["landmarks_px"] = {
-                LANDMARK_NAMES[i]: {"x": lm.x * width, "y": lm.y * height, "z": lm.z}
-                for i, lm in enumerate(image_lm.landmark)
-            }
-            entry["landmarks_world"] = {
-                LANDMARK_NAMES[i]: {"x": lm.x, "y": lm.y, "z": lm.z}
-                for i, lm in enumerate(world_lm.landmark)
-            }
-            if result.multi_handedness:
-                entry["confidence"] = result.multi_handedness[0].classification[0].score
-                entry["handedness"] = result.multi_handedness[0].classification[0].label
-        frames.append(entry)
-        idx += 1
+            entry = {"frame_idx": idx, "source_pts_ms": cap.get(cv2.CAP_PROP_POS_MSEC),
+                     "detected": False, "confidence": None}
+            if result.multi_hand_landmarks and result.multi_hand_world_landmarks:
+                image_lm = result.multi_hand_landmarks[0]
+                world_lm = result.multi_hand_world_landmarks[0]
+                entry["detected"] = True
+                entry["landmarks_px"] = {
+                    LANDMARK_NAMES[i]: {"x": lm.x * width, "y": lm.y * height, "z": lm.z}
+                    for i, lm in enumerate(image_lm.landmark)
+                }
+                entry["landmarks_world"] = {
+                    LANDMARK_NAMES[i]: {"x": lm.x, "y": lm.y, "z": lm.z}
+                    for i, lm in enumerate(world_lm.landmark)
+                }
+                if result.multi_handedness:
+                    entry["confidence"] = result.multi_handedness[0].classification[0].score
+                    entry["handedness"] = result.multi_handedness[0].classification[0].label
+            frames.append(entry)
+            idx += 1
 
-    cap.release()
-    hands.close()
+    finally:
+        cap.release()
+        if hands is not None:
+            hands.close()
+    timestamps = [f['source_pts_ms'] for f in frames]
+    info['timestamp_source'] = 'opencv_pos_msec'
+    info['timestamps_monotonic'] = bool(timestamps) and all(math.isfinite(t) and t >= 0 for t in timestamps) and all(
+        b > a for a, b in zip(timestamps, timestamps[1:]))
+    info['decoded_frames'] = len(frames)
     return frames, info
 
 

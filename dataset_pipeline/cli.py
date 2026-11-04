@@ -26,11 +26,13 @@ def cmd_run(args):
         video_paths.extend(sorted(glob.glob(pattern)))
     if not video_paths:
         print("입력 클립을 찾을 수 없습니다:", args.clips)
-        return
-    result = run_batch(video_paths, config=config, w3_new=args.w3, output_dir=args.output)
+        return 2
+    result = run_batch(video_paths, config=config, w3_new=args.w3, output_dir=args.output,
+                       render_candidates=not args.report_only)
     print(f"처리: {len(result['clip_reports'])}개 클립, 채택: {len(result['manifest'])}개")
     if result["weights_report"]:
         print("재추정 가중치:", result["weights_report"])
+    return int(any(r['final_status'] == 'quarantined_render' for r in result['clip_reports']))
 
 
 def cmd_grid_search_frontal(args):
@@ -59,6 +61,7 @@ def main():
     p_run.add_argument("--output", default="pipeline_output")
     p_run.add_argument("--config", default=None, help="PipelineConfig 오버라이드 JSON 파일")
     p_run.add_argument("--w3", type=float, default=None, help="w3_new를 직접 지정(생략 시 배치에서 재추정)")
+    p_run.add_argument("--report-only", action="store_true", help="기하 후보 보고서만 작성하고 영상은 생성하지 않음")
     p_run.set_defaults(func=cmd_run)
 
     p_grid = sub.add_parser("grid-search-frontal", help="§4 T_frontal 그리드서치 (1회성)")
@@ -73,7 +76,7 @@ def main():
     p_smoke.set_defaults(func=cmd_smoke_test)
 
     args = parser.parse_args()
-    args.func(args)
+    raise SystemExit(args.func(args) or 0)
 
 
 if __name__ == "__main__":
