@@ -10,9 +10,9 @@
 
 ## 보기
 
-저장소 루트에서 `python -m http.server 8766 --bind 127.0.0.1`을 실행하고 아래 주소를 연다.
+저장소 루트에서 `python -m experiments.preview_server --port 8767`을 실행하고 아래 주소를 연다. 새 서버는 영상 Range/seek를 지원한다.
 
-`http://127.0.0.1:8766/experiments/prod_palm_variants/`
+`http://127.0.0.1:8767/experiments/prod_palm_variants/`
 
 비교 화면의 기존/A/B/C 버튼은 실제 prod의 HTML/CSS와 렌더러로 정적 예시를 보여 준다. 카메라/모델 시작과 8초 배너 닫기만 생략해 비교한다. 예시 손은 촬영/실제 문제 결과가 아니다. “이 버전 직접 열기”는 카메라를 쓰는 실제 수정본이다. 카메라 허용은 사용자가 수행한다. 직접 연 버전은 기존 prod처럼 모델/문제 자료를 네트워크로 읽는다.
 

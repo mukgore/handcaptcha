@@ -32,7 +32,7 @@ def cmd_run(args):
     print(f"처리: {len(result['clip_reports'])}개 클립, 채택: {len(result['manifest'])}개")
     if result["weights_report"]:
         print("재추정 가중치:", result["weights_report"])
-    return int(any(r['final_status'] == 'quarantined_render' for r in result['clip_reports']))
+    return int(any(r['final_status'].startswith('quarantined_') for r in result['clip_reports']))
 
 
 def cmd_grid_search_frontal(args):

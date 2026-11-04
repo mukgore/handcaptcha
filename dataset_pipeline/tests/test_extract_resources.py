@@ -28,7 +28,7 @@ class ExtractResourceTests(unittest.TestCase):
         capture=Capture()
         with patch('dataset_pipeline.stage1_extract.cv2.VideoCapture',return_value=capture), \
              patch('dataset_pipeline.stage1_extract.mp.solutions.hands.Hands',side_effect=RuntimeError('model failed')):
-            with self.assertRaises(RuntimeError): extract_landmarks('synthetic.mp4')
+            with self.assertRaises(RuntimeError): extract_landmarks('synthetic.mp4', resource_mode='native')
         self.assertTrue(capture.released)
 
     def test_detector_failure_closes_model_and_capture(self):
@@ -37,7 +37,7 @@ class ExtractResourceTests(unittest.TestCase):
                                  close=lambda:closed.append(True))
         with patch('dataset_pipeline.stage1_extract.cv2.VideoCapture',return_value=capture), \
              patch('dataset_pipeline.stage1_extract.mp.solutions.hands.Hands',return_value=detector):
-            with self.assertRaises(RuntimeError): extract_landmarks('synthetic.mp4')
+            with self.assertRaises(RuntimeError): extract_landmarks('synthetic.mp4', resource_mode='native')
         self.assertTrue(capture.released);self.assertEqual(closed,[True])
 
     def test_decoder_timestamps_are_retained_without_index_fallback(self):
@@ -45,7 +45,7 @@ class ExtractResourceTests(unittest.TestCase):
         detector=SimpleNamespace(process=lambda image:SimpleNamespace(multi_hand_landmarks=None), close=lambda:None)
         with patch('dataset_pipeline.stage1_extract.cv2.VideoCapture',return_value=capture), \
              patch('dataset_pipeline.stage1_extract.mp.solutions.hands.Hands',return_value=detector):
-            frames,info=extract_landmarks('synthetic.mp4')
+            frames,info=extract_landmarks('synthetic.mp4', resource_mode='native')
         self.assertEqual([f['source_pts_ms'] for f in frames],[0.,100.,200.])
         self.assertEqual(info['decoded_frames'],3);self.assertTrue(info['timestamps_monotonic'])
         self.assertTrue(capture.released)

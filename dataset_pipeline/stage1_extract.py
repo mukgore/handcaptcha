@@ -7,11 +7,22 @@ landmarks (needed later in Stage 6 to actually draw a mask on the frame).
 import cv2
 import mediapipe as mp
 import math
+import os
+from pathlib import Path
 
 from dataset_pipeline.common import LANDMARK_NAMES
 
 
-def extract_landmarks(video_path, confidence=0.5):
+def extract_landmarks(video_path, confidence=0.5, *, resource_mode='auto', worker_timeout_seconds=300):
+    if resource_mode not in ('auto', 'native', 'worker'):
+        raise ValueError('Unsupported MediaPipe resource mode')
+    if resource_mode == 'worker' or (resource_mode == 'auto' and os.name == 'nt' and not str(Path(mp.__file__)).isascii()):
+        from dataset_pipeline.resource_worker import extract_in_worker
+        return extract_in_worker(video_path, confidence, timeout_seconds=worker_timeout_seconds)
+    return _extract_landmarks_native(video_path, confidence)
+
+
+def _extract_landmarks_native(video_path, confidence=0.5):
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         raise FileNotFoundError(f"영상을 열 수 없음: {video_path}")

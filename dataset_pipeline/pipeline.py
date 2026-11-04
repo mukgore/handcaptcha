@@ -10,6 +10,7 @@ shared weight.
 """
 import json
 import os
+import uuid
 
 from dataset_pipeline.config import PipelineConfig
 from dataset_pipeline.stage1_extract import extract_landmarks
@@ -64,11 +65,26 @@ def run_batch(video_paths, config=None, w3_new=None, output_dir=None, *, render_
         raise ValueError('Duplicate source basenames are ambiguous; use unique clip names')
     if render_candidates and not output_dir:
         raise ValueError('Candidate rendering requires a private output directory')
+    if output_dir:
+        if os.path.exists(output_dir) and (not os.path.isdir(output_dir) or os.listdir(output_dir)):
+            raise FileExistsError('Batch output must be a new or empty private directory')
+        os.makedirs(output_dir, exist_ok=True)
+        with open(os.path.join(output_dir, '.pipeline_owner'), 'x', encoding='ascii') as owner:
+            owner.write(uuid.uuid4().hex + '\n')
     clip_reports = []
     accepted_frames_by_clip = {}
 
     for path in video_paths:
-        report, extended = process_clip(path, config)
+        try:
+            report, extended = process_clip(path, config)
+        except (OSError, ValueError, RuntimeError) as error:
+            report = {'clip_id': os.path.basename(path), 'final_status': 'quarantined_extraction',
+                      'extraction_error_type': type(error).__name__}
+            diagnostic_id = getattr(error, 'diagnostic_id', None)
+            if isinstance(diagnostic_id, str):
+                report['private_diagnostic_id'] = diagnostic_id
+            clip_reports.append(report)
+            continue
         if extended is not None:
             accepted_frames_by_clip[report["clip_id"]] = extended
         clip_reports.append(report)
@@ -112,12 +128,12 @@ def run_batch(video_paths, config=None, w3_new=None, output_dir=None, *, render_
 
     if output_dir:
         os.makedirs(output_dir, exist_ok=True)
-        with open(os.path.join(output_dir, "pipeline_report.json"), "w", encoding="utf-8") as fh:
+        with open(os.path.join(output_dir, "pipeline_report.json"), "x", encoding="utf-8") as fh:
             json.dump({"config": config.to_dict(), "w3_new_used": w3_new, "clips": clip_reports}, fh, ensure_ascii=False, indent=2)
         if weights_report:
-            with open(os.path.join(output_dir, "weights_report.json"), "w", encoding="utf-8") as fh:
+            with open(os.path.join(output_dir, "weights_report.json"), "x", encoding="utf-8") as fh:
                 json.dump(weights_report, fh, ensure_ascii=False, indent=2)
-        with open(os.path.join(output_dir, "manifest.json"), "w", encoding="utf-8") as fh:
+        with open(os.path.join(output_dir, "manifest.json"), "x", encoding="utf-8") as fh:
             json.dump({"accepted_clips": manifest, "scope": result['manifest_scope'],
                        "release_allowed": False, "artifacts": artifacts}, fh, ensure_ascii=False, indent=2)
 
