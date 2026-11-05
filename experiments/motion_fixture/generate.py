@@ -18,8 +18,8 @@ from dataset_pipeline.config import PipelineConfig
 from dataset_pipeline.stage7_gate import gate_clip
 from dataset_pipeline.storage import private_output
 
-VERSION = 'authored_3d_hand_fixture_v1'
-TEMPLATES = ('index_flex','middle_flex','alternating')
+VERSION = 'authored_3d_hand_fixture_v2'
+TEMPLATES = ('index_flex','middle_flex','alternating','middle_touch_sphere')
 FINGERS = {5:((-.38,-.05,0.),(.35,.28,.22)),
            9:((0.,0.,0.),(.28,.24,.20)),
            13:((.38,-.05,0.),(.34,.27,.21)),
@@ -29,6 +29,9 @@ WIDTH, HEIGHT, SCALE = 512, 420, 150.
 
 
 def generate_motion(template,seed,frames=24,fps=12.):
+    if template == 'middle_touch_sphere':
+        from .contact import generate_touch
+        return generate_touch(seed, frames, fps)[0]
     if template not in TEMPLATES or isinstance(seed,bool) or not isinstance(seed,int) or seed<0:
         raise ValueError('Known template and nonnegative integer seed required')
     if isinstance(frames,bool) or not isinstance(frames,int) or not 3<=frames<=240:
@@ -71,6 +74,10 @@ def generate_motion(template,seed,frames=24,fps=12.):
 
 def draw_frame(frame):
     image=np.full((HEIGHT,WIDTH,3),(40,32,24),np.uint8)
+    if 'authored_object' in frame:
+        obj=frame['authored_object'];center=obj['center']
+        cv2.circle(image,(round(256+SCALE*center[0]),round(220-SCALE*center[1])),
+                   round(SCALE*obj['radius']),(80,190,100),2,cv2.LINE_AA)
     p=[(int(frame['landmarks_px'][name]['x']),int(frame['landmarks_px'][name]['y'])) for name in LANDMARK_NAMES]
     cv2.fillPoly(image,[np.array([p[j] for j in (0,1,5,9,13,17)],np.int32)],(130,174,206))
     for start in (1,5,9,13,17):
@@ -87,6 +94,10 @@ def build_fixture(output,*,template,seed,w3_new,frames=24,fps=12.):
     if isinstance(w3_new,bool) or not isinstance(w3_new,(int,float)) or not math.isfinite(w3_new) or w3_new<=0:
         raise ValueError('Explicit finite positive mask multiplier required')
     records=generate_motion(template,seed,frames,fps)
+    contact_report=None
+    if template=='middle_touch_sphere':
+        from .contact import inspect
+        contact_report=inspect(records,records[0]['authored_object'])
     root=Path(output);root.mkdir(parents=True,exist_ok=False)
     source=root/'authored_source.avi'
     writer=cv2.VideoWriter(str(source),cv2.VideoWriter_fourcc(*'FFV1'),fps,(WIDTH,HEIGHT))
@@ -112,16 +123,20 @@ def build_fixture(output,*,template,seed,w3_new,frames=24,fps=12.):
             'gate_pass_frac':gate['pass_frac'],'gate_accepted':gate['accepted'],
             'state':'RESEARCH_FIXTURE_ONLY','release_allowed':False,'artifact':None,
             'bounds_radians':BOUNDS_RADIANS,'bounds_status':'unvalidated_engineering_parameters',
-            'learned_model':None,'object_contact_model':None,'human_feasibility_tested':False,
+            'learned_model':None,'object_contact_model':contact_report,'human_feasibility_tested':False,
             'limitations':['not observed human motion; not anatomical ground truth',
                            'abstract bone graph; no surface collision or grasp physics',
                            'seed variation does not establish independent motion families',
                            'not a Text2HOI reproduction or a completed data-backed P1 study']}
-    if gate['accepted']:
+    if contact_report is not None:
+        report['contact_source_sha256']=hashlib.sha256(Path(__file__).with_name('contact.py').read_bytes()).hexdigest()
+    if gate['accepted'] and (contact_report is None or contact_report['accepted']):
         report['artifact']=build_candidate(source,records,{'width':WIDTH,'height':HEIGHT,'fps':fps,'total_frames':frames},
                                             w3_new,config,root/'candidates')
     (root/'fixture_report.json').write_text(json.dumps(report,indent=2,allow_nan=False)+'\n',encoding='utf8')
-    cv2.imwrite(str(root/'preview.png'),draw_frame(records[len(records)//2]))
+    ok,encoded=cv2.imencode('.png',draw_frame(records[len(records)//2]))
+    if not ok:raise ValueError('Fixture preview encoding failed')
+    with (root/'preview.png').open('xb') as preview:preview.write(encoded.tobytes())
     return report
 
 

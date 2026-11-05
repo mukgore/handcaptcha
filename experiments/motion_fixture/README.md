@@ -17,3 +17,9 @@ python -m experiments.motion_fixture.generate --output ../private_artifacts/auth
 보고서는 항상 `RESEARCH_FIXTURE_ONLY`, `release_allowed=false`, `human_feasibility_tested=false`다. 후보 manifest도 운영 release를 허용하지 않는다. 관절 범위는 검증되지 않은 공학 파라미터이며, 단순 뼈 그림에는 표면·충돌·물체 접촉·잡기 물리가 없다. 사람이 따라 할 수 있는지, 동작이 모호한지, 공격에 강한지는 시험하지 않았다. seed나 동작 이름을 독립 source family 또는 참여자 수로 세지 않는다. Text2HOI/GRAB/MANO 재현이나 완성된 실측 P1이 아니다.
 
 검사는 seed 재현·진폭 변화, 뼈 길이 보존·작성 범위, 잘못된 recipe, 실제 영상→가림 출력, 덮어쓰기 거부, 잘못된 mask 배율의 무출력 처리를 확인한다.
+
+## 물체 접촉 fixture 추가 (2026-11-05)
+
+`--template middle_touch_sphere`는 기존 middle_flex에 정적 구형 물체를 두고 중지 끝이 접근·접촉·후퇴하도록 배치한다. 같은 원본/가림 출력 경로를 사용한다. 손가락/손목 연결의 20개 선분을 반지름0.025 capsule로 간주하고 구 반지름0.10과 모든 프레임의 최소 거리를 검사한다. 접촉 허용0.003과 길이 단위는 미검증 공학값이다. 고정 bone 길이·전체 frame 순서·비관통·시작/끝 이격·중간 접촉을 모두 요구하며 실패하면 후보 출력하지 않는다.
+
+fixture_report.json의 object_contact_model에 분모/접촉 frame/관통 frame/최소 간격이 기록된다. 물체는 정사영 wireframe circle로 표시하며 실제 depth occlusion을 표현하지 않는다. palm mesh/손 자체 충돌/역학/실제 사람 타당성/정밀3D 정답을 검증한 결과가 아니다. 기존 skeleton/seed를 독립 family로 늘려 세지 않으며 release_allowed=false를 유지한다.
