@@ -1,5 +1,7 @@
 # 자체 작성한 3D 동작 연결 시험
 
+**2026-11-05 MANO 후속:** 별도 CPU runtime에서 실제 MANO 표면12조건을 생성하고, 해석적 반경 교집합이 있는4개만 Stage7/변경 없는Stage6 및 H264로 검사했다. [실행/거부/한계 보고서](https://github.com/mukgore/codex/blob/work/todo-consolidation-20261103/docs/deliveries/2026-11-05_mano_cpu_pilot.md). `accept_mano_pilot.py`, `mask_feasibility.py`, `mask_mano_sweep.py`가 비공개 모델 출력의 hash binding/전-frame 구간/실제 가림을 연결한다. 운영 weight/calibration이나 사람/공격 승인으로 쓰지 않는다. 원본 모델·생성 표면/영상은 공개하지 않는다.
+
 [자체 작성 합성 H.264 예시](previews/authored_middle_flex_h264.mp4)를 볼 수 있다. 24frame/2초이며 실제 사람 촬영이나 보안 challenge가 아니다. 컨테이너·가림/visible raster·Chrome 재생/seek 검사를 했고 [검사 범위](../../dataset_pipeline/CONTAINER_RENDITION.md)를 기록했다.
 
 사용자는 별도로 제공할 원본 동작/대응 자료가 **없음**을 확인했다. 이후 기존 저장소 ZIP에서 관찰 영상1개와 추정 좌표를 확인했지만 정밀 3D 정답이나 독립 평가 자료는 아니다. 이 모듈은 직접 작성한 단순21점 골격으로 코드 연결을 시험하며, 숨긴 관절의 추정값을 실제 정답으로 쓰지 않는다. 자체 생성 코드는 촬영 자료 없이 진행할 수 있고, 실측 비교·물체 접촉·사람 수행 가능성 검증은 계속 남아 있다.
