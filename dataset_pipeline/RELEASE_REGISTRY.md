@@ -12,6 +12,8 @@ QUARANTINED/RETIRED는 사유를 남기는 종료 상태다. 이 버전에서 �
 
 기존 prod/GitHub Pages가 자동으로 이 등록부를 참조하는 것은 아니다. 비공개 실제 송출 서버 연결·검토자 인증/권한·외부 CDN의 이미 전달된 사본·요청 중 권리 철회 정책은 별도다. 합성 contract 검사가 실제 보안 평가를 대신하지 않는다.
 
+2026-11-05: [비공개 송출 연결 기반](PRIVATE_DELIVERY.md)에 실제 registry 조회·세션/조직/만료·Range·철회·한 번의 operation 소비를 추가했다. 운영 gateway/검토자 인증·prod 연결/배포는 아직 별도이며 위 기존 경계를 유지한다.
+
 ## 비공개 경로
 
 candidate·batch·legacy ingest/bake·motion fixture의 출력은 저장소 웹 루트 내부 또는 그 상위 디렉터리를 지정하면 거부한다. run CLI 기본 출력은 `../private_artifacts/pipeline_output`이다. Git ignore는 HTTP 접근 제어가 아니다. 원본/추정 좌표·후보·등록부를 정적 웹 폴더에 두지 않는다.
