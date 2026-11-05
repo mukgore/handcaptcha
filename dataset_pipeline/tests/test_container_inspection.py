@@ -35,3 +35,9 @@ class ContainerInspectionTests(unittest.TestCase):
     def test_unknown_metadata_side_data_and_dimensions_are_rejected(self):
         for modify in (lambda p:p['format']['tags'].update(reference='hidden'),lambda p:p['streams'][0].update(width=64),lambda p:p['packets'][0].update(side_data_list=[{'unknown':1}])):
             probe=copy.deepcopy(self.probe);modify(probe);self.assertFalse(analyze(probe,self.expected)['passed'])
+
+    def test_positive_but_inconsistent_packet_duration_is_rejected(self):
+        self.probe['packets'][1]['duration']=300
+        report=analyze(self.probe,self.expected)
+        self.assertFalse(report['passed'])
+        self.assertIn('packet_duration_differs_from_explicit_cfr',report['reasons'])

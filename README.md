@@ -1,5 +1,7 @@
 **<손 동작 추정 기반 CAPTCHA>**
 
+**2026-11-05 후속:** [통합 현재 현황](https://github.com/mukgore/codex/blob/work/todo-consolidation-20261103/docs/deliveries/2026-11-05_work_plan.md), [물체 접촉 fixture](experiments/motion_fixture/README.md), [비공개 송출 core](dataset_pipeline/PRIVATE_DELIVERY.md), [격리·오프라인 재현환경](dataset_pipeline/ENVIRONMENT_REBUILD.md). 기존 UI·Stage6은 유지합니다. 실제 인체/공격 검증·운영 승인/배포는 남아 있습니다. 아래는 이전 구현 시점의 기록입니다.
+
 **기존 prod UI 기반 수정안:** [기존/A/B/C 비교 및 실행 방법](experiments/prod_palm_variants/README.md). 원래 목표·카메라 패널과 동작을 사용하고 손바닥 안내만 달리한 세 버전입니다. 앞선 hand_selection 독립 시연과 구분합니다.
 
 [자체 작성 3D 골격 fixture](experiments/motion_fixture/README.md)는 정해진 동작 생성→렌더→가림 MP4의 연결을 시험합니다. 원본 동작 자료가 없어 실측 기반 P1은 대기 상태이며, 실제 인체·접촉·사람/공격 성능을 검증한 생성기는 아닙니다.

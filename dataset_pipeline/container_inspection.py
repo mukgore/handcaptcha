@@ -45,16 +45,19 @@ def analyze(probe, expected):
     try:
         base=Fraction(stream['time_base'])
         if base<=0:raise ValueError('Invalid timebase')
-        pts=[];dts=[]
+        pts=[];dts=[];durations=[]
         for packet in packets:
             if packet.get('stream_index')!=stream['index'] or packet.get('side_data_list'):
                 raise ValueError('Unknown packet stream or side data')
             pts.append(_integer(packet['pts'])*base);dts.append(_integer(packet['dts'])*base)
             if _integer(packet['duration'])<=0:raise ValueError('Packet duration missing')
+            durations.append(_integer(packet['duration'])*base)
         if any(b<=a for a,b in zip(dts,dts[1:])):reasons.append('decode_timestamps_not_increasing')
         ordered=sorted(pts)
         if any(t<0 for t in ordered) or len(set(ordered))!=len(ordered):reasons.append('invalid_presentation_timestamps')
         tolerance=max(base/2,Fraction(1,1_000_000))
+        if any(abs(value-Fraction(1,1)/fps)>max(base,Fraction(1,1_000_000)) for value in durations):
+            reasons.append('packet_duration_differs_from_explicit_cfr')
         if any(abs(t-Fraction(i,1)/fps)>tolerance for i,t in enumerate(ordered)):
             reasons.append('presentation_timeline_differs_from_explicit_cfr')
         duration=Fraction(fmt['duration'])

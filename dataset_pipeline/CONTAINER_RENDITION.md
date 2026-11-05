@@ -13,3 +13,7 @@ rendition.build_h264_rendition은 연구 candidate manifest의 bytes·timeline·
 브라우저 시험은 기존 간이 HTTP 서버에서 seekable 범위0 때문에 중간 seek가0으로 돌아왔다. experiments.preview_server의 byte Range 응답으로 바꾼 뒤 격리 Chrome에서512×420/2초/오류없음/seek1초 및 seekable0~2초를 확인했다. 카메라를 쓰지 않은 자체 합성 영상 재생 시험이다.
 
 권장 로컬 보기: 저장소 루트에서 `python -m experiments.preview_server --port 8767`. 이 서버는 public research asset만 제공하며 hidden/private 경로·directory listing·범위 밖 경로를 거부한다. Range/HEAD/416·정확한 byte 응답을 검사했다. registry-backed 운영 송출·세션/tenant·만료/cache 정책이 구현됐다는 뜻은 아니다.
+
+## 2026-11-05 추가 실제 container 검사
+
+`tools/container_smoke.py`로 FFmpeg가 만든6개 실제 MP4를 별도 ffprobe로 검사했다. MPEG4 CFR, 30000/1001 H264, B-frame H264는 통과하고 추가 audio·미검토 metadata·VFR gap은 거부했다. packet duration도 명시 CFR 주기와 일치해야 한다. 이 합성 container 검사는 해부학적 가림·사람/보안·권리 승인과 별개다. 모든 poster/codec/실제 자료를 포괄한 인수는 아니다.

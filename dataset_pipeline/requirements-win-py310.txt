@@ -1,0 +1,11 @@
+# Isolated Windows CPython 3.10 legacy Hands validation environment.
+# Install only ONE cv2 distribution. Full transitive wheel hashes are generated
+# by tools/rebuild_environment.py; this input alone is not a portable lock.
+mediapipe==0.10.14
+numpy==1.26.4
+protobuf==4.25.3
+opencv-contrib-python==4.10.0.84
+jax==0.4.30
+jaxlib==0.4.30
+scipy==1.14.1
+matplotlib==3.9.4

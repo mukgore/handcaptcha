@@ -1,7 +1,7 @@
-# mediapipe>=0.10.18 dropped the legacy solutions.hands API (Hands/world
-# landmarks) this pipeline relies on, in favor of the Tasks API. Pin to the
-# same version handtest1.py uses until the pipeline is ported to
-# mediapipe.tasks.python.vision.HandLandmarker.
+# The pipeline relies on legacy solutions.hands (Hands/world landmarks).
+# Keep its version explicit until a separately tested Tasks API migration.
+# For the isolated Windows/Python3.10 validated recipe use
+# requirements-win-py310.txt instead; it selects exactly one cv2 distribution.
 mediapipe==0.10.14
 opencv-python-headless
 numpy
