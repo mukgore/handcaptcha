@@ -32,3 +32,10 @@ class MaskFeasibilityTests(unittest.TestCase):
     def test_empty_missing_and_degenerate_input_rejected(self):
         for frames in ([],[{'frame_idx':0,'detected':False}],[record(0,[(0,0,0)]*21)]):
             with self.assertRaises(ValueError):inspect(frames,PipelineConfig())
+
+    def test_finite_input_with_overflowing_derived_geometry_is_rejected(self):
+        for positions in ((-1e308,1e308),(0.,100.)):
+            points=pose(2);points[0]=(positions[0],0.,0.);points[9]=(positions[1],0.,0.)
+            points[10]=(1e308,1e308,0.)
+            with self.subTest(positions=positions),self.assertRaises(ValueError):
+                inspect([record(0,points)],PipelineConfig())

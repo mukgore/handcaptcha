@@ -37,3 +37,20 @@ class ManoBridgeTests(unittest.TestCase):
         for value in (True,0,float('nan')):
             with self.assertRaises(ValueError):run(self.pilot,self.output,w3=value)
         self.assertFalse(self.output.exists())
+
+    def test_video_and_surface_drift_during_render_prevent_completion_report(self):
+        for name in ('authored_source.avi','private_surface.npz'):
+            with self.subTest(name=name):
+                original=(self.pilot/name).read_bytes()
+                output=self.root/(name+'.output')
+                def mutate(*args,**kwargs):
+                    (self.pilot/name).write_bytes(b'changed-during-render')
+                    return {'state':'synthetic-mocked-candidate'}
+                with patch('experiments.motion_fixture.accept_mano_pilot.gate_clip',return_value={'accepted':True,'pass_frac':1,'frame_diagnostics':[]}),patch('experiments.motion_fixture.accept_mano_pilot.build_candidate',side_effect=mutate):
+                    with self.assertRaisesRegex(ValueError,'changed during'):run(self.pilot,output,w3=2.5)
+                self.assertFalse((output/'mask_report.json').exists())
+                (self.pilot/name).write_bytes(original)
+
+    def test_string_proposal_origin_is_not_accepted_as_a_boolean(self):
+        with self.assertRaises(ValueError):run(self.pilot,self.output,w3=2.5,feasibility_proposal='false')
+        self.assertFalse(self.output.exists())

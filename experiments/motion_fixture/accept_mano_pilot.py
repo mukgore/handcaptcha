@@ -14,12 +14,14 @@ from dataset_pipeline.storage import private_output
 def run(pilot, output, *, w3, feasibility_proposal=False):
     if isinstance(w3,bool) or not isinstance(w3,(int,float)) or not math.isfinite(w3) or w3<=0:
         raise ValueError('Explicit finite positive mask multiplier required')
+    if type(feasibility_proposal) is not bool:raise ValueError('Explicit boolean proposal origin required')
     pilot=Path(pilot).resolve(strict=True);output=private_output(output)
     report_path=pilot/'mano_report.json';binding=digest(report_path)
     report=json.loads(report_path.read_text(encoding='utf8'))
     if report.get('state')!='RESEARCH_MANO_PCA_PILOT' or report.get('release_allowed') is not False:
         raise ValueError('Explicit private research MANO pilot required')
-    for name,key in (('authored_source.avi','source_video_sha256'),('private_reference.json','reference_sha256'),('private_surface.npz','surface_sha256')):
+    inputs=(('authored_source.avi','source_video_sha256'),('private_reference.json','reference_sha256'),('private_surface.npz','surface_sha256'))
+    for name,key in inputs:
         if digest(pilot/name)!=report.get(key):raise ValueError('Pilot artifact binding mismatch')
     reference=json.loads((pilot/'private_reference.json').read_text(encoding='utf8'))
     frames,info=reference['frames'],reference['source_info'];config=PipelineConfig()
@@ -36,7 +38,7 @@ def run(pilot, output, *, w3, feasibility_proposal=False):
     if gate['accepted']:
         result['artifact']=build_candidate(pilot/'authored_source.avi',frames,info,w3,config,output/'candidates')
         result['state']='RESEARCH_MASKED_MANO_PILOT'
-    if digest(report_path)!=binding or digest(pilot/'private_reference.json')!=report['reference_sha256']:
+    if digest(report_path)!=binding or any(digest(pilot/name)!=report[key] for name,key in inputs):
         raise ValueError('Pilot changed during mask build')
     with (output/'mask_report.json').open('x',encoding='utf8') as stream:
         json.dump(result,stream,indent=2,allow_nan=False);stream.write('\n')
