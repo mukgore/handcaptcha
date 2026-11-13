@@ -1,5 +1,7 @@
 **<손 동작 추정 기반 CAPTCHA>**
 
+**2026-11-13 UI:** [기존 prod 기반 초기 노출·가림 페이드와 모든 64개 조합](experiments/prod_ui_factorial/README.md)을 추가했습니다. 개별 수정 후 결합을 확인하는 명세 순서를 따르며, 합성 화면/동작 검사를 실제 사람 효과와 구분합니다. root prod는 교체하지 않았습니다.
+
 **2026-11-05 후속:** [통합 현재 현황](https://github.com/mukgore/codex/blob/work/todo-consolidation-20261103/docs/deliveries/2026-11-05_work_plan.md), [물체 접촉 fixture](experiments/motion_fixture/README.md), [비공개 송출 core](dataset_pipeline/PRIVATE_DELIVERY.md), [격리·오프라인 재현환경](dataset_pipeline/ENVIRONMENT_REBUILD.md). 기존 UI·Stage6은 유지합니다. 실제 인체/공격 검증·운영 승인/배포는 남아 있습니다. 아래는 이전 구현 시점의 기록입니다.
 
 **기존 prod UI 기반 수정안:** [기존/A/B/C 비교 및 실행 방법](experiments/prod_palm_variants/README.md). 원래 목표·카메라 패널과 동작을 사용하고 손바닥 안내만 달리한 세 버전입니다. 앞선 hand_selection 독립 시연과 구분합니다.

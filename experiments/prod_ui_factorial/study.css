@@ -1,0 +1,16 @@
+.factorial-study .panel-header{flex-wrap:wrap;gap:6px}
+.factorial-study .trial-content{min-height:0;overflow:auto}
+.factorial-study .trial-panel{min-height:310px}
+.factorial-study.ui-overlay .trial-content>.trial-panel:first-child{display:none}
+.factorial-study .study-target{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#0f172a;z-index:3;transition:none}
+.factorial-study .study-target[hidden]{display:none}
+.factorial-study .loading-overlay{overflow:auto;padding:20px}
+.study-setup{max-width:600px;width:100%;background:white;padding:24px;border-radius:16px;box-shadow:0 6px 36px #0002;margin:auto}
+.study-setup h2{font-size:20px;margin-bottom:12px}.study-setup p{font-size:13px;line-height:1.6;margin:10px 0}
+.study-setup label{display:block;font-size:13px;margin:12px 0}.study-setup input,.study-setup select{max-width:100%;display:block;margin:5px 0;padding:6px}
+.study-setup input[type=checkbox]{display:inline}.study-setup button{margin:8px 5px 0 0;padding:9px 14px}
+.study-error{color:#b91c1c;font-size:13px}.study-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:6px 14px;background:#f1f5f9;font-size:12px}
+.study-controls button{padding:5px 9px;border:1px solid #cbd5e1;border-radius:5px;background:white;cursor:pointer}
+.ui-overlay .camera-area #kfInfo{top:10px;left:10px}.ui-overlay .camera-area #matchInd{bottom:8px}
+.factorial-study.ui-overlay .palm-ui-chip{top:auto;bottom:50px}
+@media(max-width:768px){.factorial-study .trial-content{flex-direction:column}.factorial-study .trial-panel{flex:none;min-height:300px}.factorial-study.ui-overlay .trial-panel{flex:1;min-height:420px}.study-setup{padding:16px}.factorial-study .panel-header{padding:8px 10px}.factorial-study .palm-ui-chip{top:auto;bottom:48px}}

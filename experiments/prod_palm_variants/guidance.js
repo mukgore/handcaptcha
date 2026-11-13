@@ -1,8 +1,9 @@
 /* Presentation-only additions to hand_captcha_prod.html. */
 (() => {
     'use strict';
-    const variant = document.currentScript.dataset.palmVariant;
-    if (!['copy', 'compare', 'guide'].includes(variant)) return;
+    const variants=(document.currentScript.dataset.palmVariants ?? document.currentScript.dataset.palmVariant ?? '').split(',').filter(Boolean);
+    if (!variants.length || new Set(variants).size!==variants.length || variants.some(v=>!['copy','compare','guide'].includes(v))) return;
+    for(const variant of variants){
     const camera = document.querySelector('.camera-area');
     const panel = camera.closest('.trial-panel');
     const header = panel.querySelector('.panel-header');
@@ -46,7 +47,8 @@
             };
         }
     }
-    details.id = 'palmUiDetails';
+    details.id = variants.length===1?'palmUiDetails':'palmUiDetails-'+variant;
+    if(variants.length>1)help.textContent={copy:'문구 안내',compare:'그림 안내',guide:'손금 안내'}[variant];
     help.setAttribute('aria-controls', details.id);
     let autoHidden = false;
     function setVisible(visible) {
@@ -92,5 +94,6 @@
             context.quadraticCurveTo(p[1][0]*width,p[1][1]*height,p[2][0]*width,p[2][1]*height); context.stroke();
         }
         context.restore();
+    }
     }
 })();

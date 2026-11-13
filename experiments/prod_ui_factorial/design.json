@@ -1,0 +1,659 @@
+{
+  "schema_version": 1,
+  "scope": "complete_factorial_design_not_observations",
+  "production_source_normalized_sha256": "44c88ec2ede1205684923e4b43cc4a6024e48a364a70518201262cba258be2c8",
+  "factors": [
+    "selection",
+    "overlay",
+    "copy",
+    "compare",
+    "guide",
+    "reveal"
+  ],
+  "conditions": [
+    {
+      "condition_id": "ui-00",
+      "mask": 0,
+      "selection": false,
+      "overlay": false,
+      "copy": false,
+      "compare": false,
+      "guide": false,
+      "reveal": false
+    },
+    {
+      "condition_id": "ui-01",
+      "mask": 1,
+      "selection": true,
+      "overlay": false,
+      "copy": false,
+      "compare": false,
+      "guide": false,
+      "reveal": false
+    },
+    {
+      "condition_id": "ui-02",
+      "mask": 2,
+      "selection": false,
+      "overlay": true,
+      "copy": false,
+      "compare": false,
+      "guide": false,
+      "reveal": false
+    },
+    {
+      "condition_id": "ui-03",
+      "mask": 3,
+      "selection": true,
+      "overlay": true,
+      "copy": false,
+      "compare": false,
+      "guide": false,
+      "reveal": false
+    },
+    {
+      "condition_id": "ui-04",
+      "mask": 4,
+      "selection": false,
+      "overlay": false,
+      "copy": true,
+      "compare": false,
+      "guide": false,
+      "reveal": false
+    },
+    {
+      "condition_id": "ui-05",
+      "mask": 5,
+      "selection": true,
+      "overlay": false,
+      "copy": true,
+      "compare": false,
+      "guide": false,
+      "reveal": false
+    },
+    {
+      "condition_id": "ui-06",
+      "mask": 6,
+      "selection": false,
+      "overlay": true,
+      "copy": true,
+      "compare": false,
+      "guide": false,
+      "reveal": false
+    },
+    {
+      "condition_id": "ui-07",
+      "mask": 7,
+      "selection": true,
+      "overlay": true,
+      "copy": true,
+      "compare": false,
+      "guide": false,
+      "reveal": false
+    },
+    {
+      "condition_id": "ui-08",
+      "mask": 8,
+      "selection": false,
+      "overlay": false,
+      "copy": false,
+      "compare": true,
+      "guide": false,
+      "reveal": false
+    },
+    {
+      "condition_id": "ui-09",
+      "mask": 9,
+      "selection": true,
+      "overlay": false,
+      "copy": false,
+      "compare": true,
+      "guide": false,
+      "reveal": false
+    },
+    {
+      "condition_id": "ui-10",
+      "mask": 10,
+      "selection": false,
+      "overlay": true,
+      "copy": false,
+      "compare": true,
+      "guide": false,
+      "reveal": false
+    },
+    {
+      "condition_id": "ui-11",
+      "mask": 11,
+      "selection": true,
+      "overlay": true,
+      "copy": false,
+      "compare": true,
+      "guide": false,
+      "reveal": false
+    },
+    {
+      "condition_id": "ui-12",
+      "mask": 12,
+      "selection": false,
+      "overlay": false,
+      "copy": true,
+      "compare": true,
+      "guide": false,
+      "reveal": false
+    },
+    {
+      "condition_id": "ui-13",
+      "mask": 13,
+      "selection": true,
+      "overlay": false,
+      "copy": true,
+      "compare": true,
+      "guide": false,
+      "reveal": false
+    },
+    {
+      "condition_id": "ui-14",
+      "mask": 14,
+      "selection": false,
+      "overlay": true,
+      "copy": true,
+      "compare": true,
+      "guide": false,
+      "reveal": false
+    },
+    {
+      "condition_id": "ui-15",
+      "mask": 15,
+      "selection": true,
+      "overlay": true,
+      "copy": true,
+      "compare": true,
+      "guide": false,
+      "reveal": false
+    },
+    {
+      "condition_id": "ui-16",
+      "mask": 16,
+      "selection": false,
+      "overlay": false,
+      "copy": false,
+      "compare": false,
+      "guide": true,
+      "reveal": false
+    },
+    {
+      "condition_id": "ui-17",
+      "mask": 17,
+      "selection": true,
+      "overlay": false,
+      "copy": false,
+      "compare": false,
+      "guide": true,
+      "reveal": false
+    },
+    {
+      "condition_id": "ui-18",
+      "mask": 18,
+      "selection": false,
+      "overlay": true,
+      "copy": false,
+      "compare": false,
+      "guide": true,
+      "reveal": false
+    },
+    {
+      "condition_id": "ui-19",
+      "mask": 19,
+      "selection": true,
+      "overlay": true,
+      "copy": false,
+      "compare": false,
+      "guide": true,
+      "reveal": false
+    },
+    {
+      "condition_id": "ui-20",
+      "mask": 20,
+      "selection": false,
+      "overlay": false,
+      "copy": true,
+      "compare": false,
+      "guide": true,
+      "reveal": false
+    },
+    {
+      "condition_id": "ui-21",
+      "mask": 21,
+      "selection": true,
+      "overlay": false,
+      "copy": true,
+      "compare": false,
+      "guide": true,
+      "reveal": false
+    },
+    {
+      "condition_id": "ui-22",
+      "mask": 22,
+      "selection": false,
+      "overlay": true,
+      "copy": true,
+      "compare": false,
+      "guide": true,
+      "reveal": false
+    },
+    {
+      "condition_id": "ui-23",
+      "mask": 23,
+      "selection": true,
+      "overlay": true,
+      "copy": true,
+      "compare": false,
+      "guide": true,
+      "reveal": false
+    },
+    {
+      "condition_id": "ui-24",
+      "mask": 24,
+      "selection": false,
+      "overlay": false,
+      "copy": false,
+      "compare": true,
+      "guide": true,
+      "reveal": false
+    },
+    {
+      "condition_id": "ui-25",
+      "mask": 25,
+      "selection": true,
+      "overlay": false,
+      "copy": false,
+      "compare": true,
+      "guide": true,
+      "reveal": false
+    },
+    {
+      "condition_id": "ui-26",
+      "mask": 26,
+      "selection": false,
+      "overlay": true,
+      "copy": false,
+      "compare": true,
+      "guide": true,
+      "reveal": false
+    },
+    {
+      "condition_id": "ui-27",
+      "mask": 27,
+      "selection": true,
+      "overlay": true,
+      "copy": false,
+      "compare": true,
+      "guide": true,
+      "reveal": false
+    },
+    {
+      "condition_id": "ui-28",
+      "mask": 28,
+      "selection": false,
+      "overlay": false,
+      "copy": true,
+      "compare": true,
+      "guide": true,
+      "reveal": false
+    },
+    {
+      "condition_id": "ui-29",
+      "mask": 29,
+      "selection": true,
+      "overlay": false,
+      "copy": true,
+      "compare": true,
+      "guide": true,
+      "reveal": false
+    },
+    {
+      "condition_id": "ui-30",
+      "mask": 30,
+      "selection": false,
+      "overlay": true,
+      "copy": true,
+      "compare": true,
+      "guide": true,
+      "reveal": false
+    },
+    {
+      "condition_id": "ui-31",
+      "mask": 31,
+      "selection": true,
+      "overlay": true,
+      "copy": true,
+      "compare": true,
+      "guide": true,
+      "reveal": false
+    },
+    {
+      "condition_id": "ui-32",
+      "mask": 32,
+      "selection": false,
+      "overlay": false,
+      "copy": false,
+      "compare": false,
+      "guide": false,
+      "reveal": true
+    },
+    {
+      "condition_id": "ui-33",
+      "mask": 33,
+      "selection": true,
+      "overlay": false,
+      "copy": false,
+      "compare": false,
+      "guide": false,
+      "reveal": true
+    },
+    {
+      "condition_id": "ui-34",
+      "mask": 34,
+      "selection": false,
+      "overlay": true,
+      "copy": false,
+      "compare": false,
+      "guide": false,
+      "reveal": true
+    },
+    {
+      "condition_id": "ui-35",
+      "mask": 35,
+      "selection": true,
+      "overlay": true,
+      "copy": false,
+      "compare": false,
+      "guide": false,
+      "reveal": true
+    },
+    {
+      "condition_id": "ui-36",
+      "mask": 36,
+      "selection": false,
+      "overlay": false,
+      "copy": true,
+      "compare": false,
+      "guide": false,
+      "reveal": true
+    },
+    {
+      "condition_id": "ui-37",
+      "mask": 37,
+      "selection": true,
+      "overlay": false,
+      "copy": true,
+      "compare": false,
+      "guide": false,
+      "reveal": true
+    },
+    {
+      "condition_id": "ui-38",
+      "mask": 38,
+      "selection": false,
+      "overlay": true,
+      "copy": true,
+      "compare": false,
+      "guide": false,
+      "reveal": true
+    },
+    {
+      "condition_id": "ui-39",
+      "mask": 39,
+      "selection": true,
+      "overlay": true,
+      "copy": true,
+      "compare": false,
+      "guide": false,
+      "reveal": true
+    },
+    {
+      "condition_id": "ui-40",
+      "mask": 40,
+      "selection": false,
+      "overlay": false,
+      "copy": false,
+      "compare": true,
+      "guide": false,
+      "reveal": true
+    },
+    {
+      "condition_id": "ui-41",
+      "mask": 41,
+      "selection": true,
+      "overlay": false,
+      "copy": false,
+      "compare": true,
+      "guide": false,
+      "reveal": true
+    },
+    {
+      "condition_id": "ui-42",
+      "mask": 42,
+      "selection": false,
+      "overlay": true,
+      "copy": false,
+      "compare": true,
+      "guide": false,
+      "reveal": true
+    },
+    {
+      "condition_id": "ui-43",
+      "mask": 43,
+      "selection": true,
+      "overlay": true,
+      "copy": false,
+      "compare": true,
+      "guide": false,
+      "reveal": true
+    },
+    {
+      "condition_id": "ui-44",
+      "mask": 44,
+      "selection": false,
+      "overlay": false,
+      "copy": true,
+      "compare": true,
+      "guide": false,
+      "reveal": true
+    },
+    {
+      "condition_id": "ui-45",
+      "mask": 45,
+      "selection": true,
+      "overlay": false,
+      "copy": true,
+      "compare": true,
+      "guide": false,
+      "reveal": true
+    },
+    {
+      "condition_id": "ui-46",
+      "mask": 46,
+      "selection": false,
+      "overlay": true,
+      "copy": true,
+      "compare": true,
+      "guide": false,
+      "reveal": true
+    },
+    {
+      "condition_id": "ui-47",
+      "mask": 47,
+      "selection": true,
+      "overlay": true,
+      "copy": true,
+      "compare": true,
+      "guide": false,
+      "reveal": true
+    },
+    {
+      "condition_id": "ui-48",
+      "mask": 48,
+      "selection": false,
+      "overlay": false,
+      "copy": false,
+      "compare": false,
+      "guide": true,
+      "reveal": true
+    },
+    {
+      "condition_id": "ui-49",
+      "mask": 49,
+      "selection": true,
+      "overlay": false,
+      "copy": false,
+      "compare": false,
+      "guide": true,
+      "reveal": true
+    },
+    {
+      "condition_id": "ui-50",
+      "mask": 50,
+      "selection": false,
+      "overlay": true,
+      "copy": false,
+      "compare": false,
+      "guide": true,
+      "reveal": true
+    },
+    {
+      "condition_id": "ui-51",
+      "mask": 51,
+      "selection": true,
+      "overlay": true,
+      "copy": false,
+      "compare": false,
+      "guide": true,
+      "reveal": true
+    },
+    {
+      "condition_id": "ui-52",
+      "mask": 52,
+      "selection": false,
+      "overlay": false,
+      "copy": true,
+      "compare": false,
+      "guide": true,
+      "reveal": true
+    },
+    {
+      "condition_id": "ui-53",
+      "mask": 53,
+      "selection": true,
+      "overlay": false,
+      "copy": true,
+      "compare": false,
+      "guide": true,
+      "reveal": true
+    },
+    {
+      "condition_id": "ui-54",
+      "mask": 54,
+      "selection": false,
+      "overlay": true,
+      "copy": true,
+      "compare": false,
+      "guide": true,
+      "reveal": true
+    },
+    {
+      "condition_id": "ui-55",
+      "mask": 55,
+      "selection": true,
+      "overlay": true,
+      "copy": true,
+      "compare": false,
+      "guide": true,
+      "reveal": true
+    },
+    {
+      "condition_id": "ui-56",
+      "mask": 56,
+      "selection": false,
+      "overlay": false,
+      "copy": false,
+      "compare": true,
+      "guide": true,
+      "reveal": true
+    },
+    {
+      "condition_id": "ui-57",
+      "mask": 57,
+      "selection": true,
+      "overlay": false,
+      "copy": false,
+      "compare": true,
+      "guide": true,
+      "reveal": true
+    },
+    {
+      "condition_id": "ui-58",
+      "mask": 58,
+      "selection": false,
+      "overlay": true,
+      "copy": false,
+      "compare": true,
+      "guide": true,
+      "reveal": true
+    },
+    {
+      "condition_id": "ui-59",
+      "mask": 59,
+      "selection": true,
+      "overlay": true,
+      "copy": false,
+      "compare": true,
+      "guide": true,
+      "reveal": true
+    },
+    {
+      "condition_id": "ui-60",
+      "mask": 60,
+      "selection": false,
+      "overlay": false,
+      "copy": true,
+      "compare": true,
+      "guide": true,
+      "reveal": true
+    },
+    {
+      "condition_id": "ui-61",
+      "mask": 61,
+      "selection": true,
+      "overlay": false,
+      "copy": true,
+      "compare": true,
+      "guide": true,
+      "reveal": true
+    },
+    {
+      "condition_id": "ui-62",
+      "mask": 62,
+      "selection": false,
+      "overlay": true,
+      "copy": true,
+      "compare": true,
+      "guide": true,
+      "reveal": true
+    },
+    {
+      "condition_id": "ui-63",
+      "mask": 63,
+      "selection": true,
+      "overlay": true,
+      "copy": true,
+      "compare": true,
+      "guide": true,
+      "reveal": true
+    }
+  ],
+  "hold_ms": 500,
+  "fade_ms": 500,
+  "common_prelude_ms": 1000,
+  "human_effects_verified": false
+}
