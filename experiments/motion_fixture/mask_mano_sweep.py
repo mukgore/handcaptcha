@@ -7,7 +7,7 @@ from pathlib import Path
 from dataset_pipeline.config import PipelineConfig
 from dataset_pipeline.storage import private_output
 from .mask_feasibility import inspect
-from .accept_mano_pilot import run as mask_pilot
+from .accept_mano_pilot import run as mask_pilot,load_bound_pilot,verify_pilot
 
 
 def run(source,output):
@@ -19,8 +19,12 @@ def run(source,output):
         pilot=source/name/'supervised'/'worker_journal'
         if not case['completed']:
             rows.append({'case':name,'state':'SOURCE_FAILED','accepted':False});continue
-        frames=json.loads((pilot/'private_reference.json').read_text(encoding='utf8'))['frames']
+        bound,reference,binding=load_bound_pilot(pilot)
+        if type(bound.get('component')) is not int or name!=f"{bound.get('hand')}_pc{bound['component']}":
+            raise ValueError('Case label differs from bound pilot metadata')
+        frames=reference['frames']
         feasible=inspect(frames,PipelineConfig())
+        verify_pilot(pilot,bound,binding)
         report_path=output/(name+'_feasibility.json');report_path.write_text(json.dumps(feasible,indent=2)+'\n',encoding='utf8')
         row={'case':name,'feasible':feasible['feasible'],'minimum_w3':feasible['minimum_w3'],
              'maximum_w3':feasible['maximum_w3'],'proposed_w3':feasible['proposed_w3'],'accepted':False}

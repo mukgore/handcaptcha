@@ -10,22 +10,36 @@ from dataset_pipeline.release_registry import digest
 from dataset_pipeline.stage7_gate import gate_clip
 from dataset_pipeline.storage import private_output
 
+PILOT_INPUTS=(('authored_source.avi','source_video_sha256'),('private_reference.json','reference_sha256'),('private_surface.npz','surface_sha256'))
+
+
+def verify_pilot(pilot,report,binding):
+    pilot=Path(pilot)
+    if digest(pilot/'mano_report.json')!=binding or any(digest(pilot/name)!=report[key] for name,key in PILOT_INPUTS):
+        raise ValueError('Pilot changed during analysis or mask build')
+
+
+def load_bound_pilot(pilot):
+    pilot=Path(pilot).resolve(strict=True);report_path=pilot/'mano_report.json';binding=digest(report_path)
+    report=json.loads(report_path.read_text(encoding='utf8'))
+    if report.get('state')!='RESEARCH_MANO_PCA_PILOT' or report.get('release_allowed') is not False:
+        raise ValueError('Explicit private research MANO pilot required')
+    verify_pilot(pilot,report,binding)
+    reference=json.loads((pilot/'private_reference.json').read_text(encoding='utf8'))
+    frames,info=reference['frames'],reference['source_info']
+    if (type(report.get('frames')) is not int or type(info.get('total_frames')) is not int or
+            not frames or len(frames)!=report['frames'] or info['total_frames']!=len(frames)):
+        raise ValueError('Full rendered frame denominator required')
+    return report,reference,binding
+
 
 def run(pilot, output, *, w3, feasibility_proposal=False):
     if isinstance(w3,bool) or not isinstance(w3,(int,float)) or not math.isfinite(w3) or w3<=0:
         raise ValueError('Explicit finite positive mask multiplier required')
     if type(feasibility_proposal) is not bool:raise ValueError('Explicit boolean proposal origin required')
     pilot=Path(pilot).resolve(strict=True);output=private_output(output)
-    report_path=pilot/'mano_report.json';binding=digest(report_path)
-    report=json.loads(report_path.read_text(encoding='utf8'))
-    if report.get('state')!='RESEARCH_MANO_PCA_PILOT' or report.get('release_allowed') is not False:
-        raise ValueError('Explicit private research MANO pilot required')
-    inputs=(('authored_source.avi','source_video_sha256'),('private_reference.json','reference_sha256'),('private_surface.npz','surface_sha256'))
-    for name,key in inputs:
-        if digest(pilot/name)!=report.get(key):raise ValueError('Pilot artifact binding mismatch')
-    reference=json.loads((pilot/'private_reference.json').read_text(encoding='utf8'))
+    report,reference,binding=load_bound_pilot(pilot)
     frames,info=reference['frames'],reference['source_info'];config=PipelineConfig()
-    if not frames or len(frames)!=report['frames'] or info['total_frames']!=len(frames):raise ValueError('Full rendered frame denominator required')
     gate=gate_clip(frames,w3,config);output.mkdir(parents=True,exist_ok=False)
     result={'schema_version':1,'state':'QUARANTINED_GEOMETRY','release_allowed':False,
             'origin_type':'licensed_mano_authored_pca_pilot','pilot_report_sha256':binding,
@@ -38,8 +52,7 @@ def run(pilot, output, *, w3, feasibility_proposal=False):
     if gate['accepted']:
         result['artifact']=build_candidate(pilot/'authored_source.avi',frames,info,w3,config,output/'candidates')
         result['state']='RESEARCH_MASKED_MANO_PILOT'
-    if digest(report_path)!=binding or any(digest(pilot/name)!=report[key] for name,key in inputs):
-        raise ValueError('Pilot changed during mask build')
+    verify_pilot(pilot,report,binding)
     with (output/'mask_report.json').open('x',encoding='utf8') as stream:
         json.dump(result,stream,indent=2,allow_nan=False);stream.write('\n')
     return result

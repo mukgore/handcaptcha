@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from dataset_pipeline.release_registry import digest
 from experiments.motion_fixture.accept_mano_pilot import run
+from experiments.motion_fixture.mask_mano_sweep import run as sweep
 from test_stage7_v2 import pose, record
 
 
@@ -54,3 +55,24 @@ class ManoBridgeTests(unittest.TestCase):
     def test_string_proposal_origin_is_not_accepted_as_a_boolean(self):
         with self.assertRaises(ValueError):run(self.pilot,self.output,w3=2.5,feasibility_proposal='false')
         self.assertFalse(self.output.exists())
+
+    def sweep_source(self):
+        source=self.root/'sweep';pilot=source/'right_pc0/supervised/worker_journal';pilot.mkdir(parents=True)
+        for path in self.pilot.iterdir():(pilot/path.name).write_bytes(path.read_bytes())
+        (source/'sweep_report.json').write_text(json.dumps({'cases':[{'case':'right_pc0','completed':True}]}))
+        return source,pilot
+
+    def test_geometry_rejected_case_still_requires_bound_source_files(self):
+        source,pilot=self.sweep_source();(pilot/'authored_source.avi').write_bytes(b'tampered')
+        with patch('experiments.motion_fixture.mask_mano_sweep.inspect') as geometry:
+            with self.assertRaises(ValueError):sweep(source,self.output)
+        geometry.assert_not_called();self.assertFalse((self.output/'summary.json').exists())
+
+    def test_surface_drift_during_feasibility_prevents_summary(self):
+        source,pilot=self.sweep_source()
+        def drift(*_):
+            (pilot/'private_surface.npz').write_bytes(b'changed')
+            return {'feasible':False,'minimum_w3':3,'maximum_w3':2,'proposed_w3':None}
+        with patch('experiments.motion_fixture.mask_mano_sweep.inspect',side_effect=drift):
+            with self.assertRaises(ValueError):sweep(source,self.output)
+        self.assertFalse((self.output/'summary.json').exists())
