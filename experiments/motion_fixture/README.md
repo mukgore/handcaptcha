@@ -1,5 +1,13 @@
 # 자체 작성한 3D 동작 연결 시험
 
+**2026-11-13 접촉 모형:** `grasp_contacts.py`와 `grasp_counterexamples.py`에 두 capsule–sphere 접촉 proxy와 깊이 반전 대조를 추가했다. 12개 대조 중 4개는 격리했고 8개·H.264 192프레임을 검증했다. 전체 pipeline 111개 통과. 정사영 선 그림이며 depth buffer/표면 가림/그림자·안정적 grasp·해부학·중력·마찰은 검증하지 않았다. 실제 물체 깊이를 아는 조건과 영상만 아는 조건을 구분한다. 같은 픽셀의 복수 3D 설명을 단일 정답이나 공격 저항성으로 해석하지 않는다.
+
+```powershell
+python -m experiments.motion_fixture.grasp_counterexamples --output ../private_artifacts/NEW_CONTACT_RUN --ffmpeg ../private_tools/ffmpeg-9.0.2/ffmpeg.exe --ffprobe ../private_tools/ffmpeg-9.0.2/ffprobe.exe
+```
+
+새 폴더에서만 실행한다. 출력·좌표는 비공개이며 release_allowed=false다. [결과·분모·한계·남은 입력](https://github.com/mukgore/codex/blob/work/todo-consolidation-20261103/docs/deliveries/2026-11-13_grasp_contact_counterexamples.md). 실행 코드 기준 `7f86a97`; 뒤의 문서는 실행 당시 snapshot을 대체하지 않는다. 원래 촬영·사람 비교 단계의 우선순위를 유지한다.
+
 **2026-11-13 MANO 검토:** 기존 2026-11-05 로컬 변경을 현재 작업 브랜치에 통합하고, 모델 유래로 기록된 기존 12개 산출물을 다시 검사했다. 모든 프레임의 반경 교집합이 있는 4개만 Stage7/변경 없는 Stage6와 H.264 96프레임을 통과했다. [최신 검사/거부/한계 보고서](https://github.com/mukgore/codex/blob/work/todo-consolidation-20261103/docs/deliveries/2026-11-13_mano_artifact_review.md). 새 모델 추론이나 동작 생성은 실행하지 않았다. 원본 모델·좌표·표면·영상은 공개하지 않는다.
 
 `load_bound_pilot`/`verify_pilot`은 완료된 모든 원본의 영상·참조·표면·보고서 연결을 확인한다. 기하에서 거부될 자료도 검사를 생략하지 않으며, 검사 도중 파일이 바뀌면 완료 보고서를 쓰지 않는다. `mask_feasibility`는 모든 프레임의 가림/단서 조건 교집합을 계산하고 유효한 유한 구간에만 중간값을 제안한다. 계산 범위를 넘는 유한 좌표도 거부한다. 제안은 source별 생성 제약이며 실제 gate/래스터 재검사가 필요하다. gate를 약화시키거나 데이터셋의 운영 weight를 보정한 것이 아니다.
