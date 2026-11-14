@@ -1,5 +1,13 @@
 # 자체 작성한 3D 동작 연결 시험
 
+**2026-11-14 표면/깊이 단서:** `surface_passes.py`가 capsule/구의 실제 앞뒤 표면을 계산하고 `depth_cue_audit.py`가 물체 표시/제거 × 단색/고정 조명의 네 조건을 비교한다. 12개 깊이 제어·48개 모드 사례 중 접촉 실패 16개는 격리했고, 32개 H.264·768프레임을 검사했다. pipeline 118개 통과. 두 뼈 proxy의 가림 밖 표면도 검사하되 전체 해부학을 보장하지 않는다. palm mesh·그림자·반사·물리/인체 검증은 없다.
+
+```powershell
+python -m experiments.motion_fixture.depth_cue_audit --output ../private_artifacts/NEW_SURFACE_RUN --ffmpeg ../private_tools/ffmpeg-9.0.2/ffmpeg.exe --ffprobe ../private_tools/ffmpeg-9.0.2/ffprobe.exe
+```
+
+실제 실험은 codex의 `validation_v03.execution_record`로 위 명령을 감싸 새 비공개 기록/결과 폴더를 사용한다. 실행 ID `G04-G05-SURFACE-CUES-20261114`는 코드 `43e809a`로 수행했다. [결과/해석/실행 기록](https://github.com/mukgore/codex/blob/work/todo-consolidation-20261103/docs/deliveries/2026-11-14_surface_depth_cues.md). 물체 없이도 조명 단서가 생기며, 다른 모형은 최종 가림 영상이 같은 유효 깊이 대안을 갖는다. 픽셀 차이를 사람/AI 성능이나 단일 정답의 증거로 쓰지 않는다. raw/depth/owner/좌표는 비공개이고 release_allowed=false다.
+
 **2026-11-13 접촉 모형:** `grasp_contacts.py`와 `grasp_counterexamples.py`에 두 capsule–sphere 접촉 proxy와 깊이 반전 대조를 추가했다. 12개 대조 중 4개는 격리했고 8개·H.264 192프레임을 검증했다. 전체 pipeline 111개 통과. 정사영 선 그림이며 depth buffer/표면 가림/그림자·안정적 grasp·해부학·중력·마찰은 검증하지 않았다. 실제 물체 깊이를 아는 조건과 영상만 아는 조건을 구분한다. 같은 픽셀의 복수 3D 설명을 단일 정답이나 공격 저항성으로 해석하지 않는다.
 
 ```powershell
