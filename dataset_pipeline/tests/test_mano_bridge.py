@@ -1,4 +1,6 @@
 import json
+import subprocess
+import sys
 from pathlib import Path
 import tempfile
 import unittest
@@ -11,6 +13,12 @@ from test_stage7_v2 import pose, record
 
 
 class ManoBridgeTests(unittest.TestCase):
+    def test_saved_pilot_reader_does_not_import_camera_extraction(self):
+        subprocess.run([sys.executable,'-c',
+            "import sys; from experiments.motion_fixture.accept_mano_pilot import load_bound_pilot; "
+            "assert 'mediapipe' not in sys.modules; assert 'dataset_pipeline.candidate' not in sys.modules"],
+            cwd=Path(__file__).resolve().parents[2],check=True,capture_output=True)
+
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup);self.root=Path(self.temp.name)
         self.pilot=self.root/'pilot';self.pilot.mkdir();self.output=self.root/'output'

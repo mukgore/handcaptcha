@@ -4,13 +4,20 @@ import json
 import math
 from pathlib import Path
 
-from dataset_pipeline.candidate import build_candidate
-from dataset_pipeline.config import PipelineConfig
 from dataset_pipeline.release_registry import digest
-from dataset_pipeline.stage7_gate import gate_clip
 from dataset_pipeline.storage import private_output
 
 PILOT_INPUTS=(('authored_source.avi','source_video_sha256'),('private_reference.json','reference_sha256'),('private_surface.npz','surface_sha256'))
+
+
+def build_candidate(*args,**kwargs):
+    from dataset_pipeline.candidate import build_candidate as implementation
+    return implementation(*args,**kwargs)
+
+
+def gate_clip(*args,**kwargs):
+    from dataset_pipeline.stage7_gate import gate_clip as implementation
+    return implementation(*args,**kwargs)
 
 
 def verify_pilot(pilot,report,binding):
@@ -34,6 +41,9 @@ def load_bound_pilot(pilot):
 
 
 def run(pilot, output, *, w3, feasibility_proposal=False):
+    # Reading/hash-checking saved pilots must also work in the CPU model
+    # runtime, which does not install camera extraction/MediaPipe packages.
+    from dataset_pipeline.config import PipelineConfig
     if isinstance(w3,bool) or not isinstance(w3,(int,float)) or not math.isfinite(w3) or w3<=0:
         raise ValueError('Explicit finite positive mask multiplier required')
     if type(feasibility_proposal) is not bool:raise ValueError('Explicit boolean proposal origin required')
