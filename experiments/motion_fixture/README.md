@@ -1,5 +1,7 @@
 # 자체 작성한 3D 동작 연결 시험
 
+**2026-11-14 보관 MANO 대응:** `mano_reference_audit.py`는 저장 reference/NPZ, 다섯 named mesh tip, 고정 화면 투영을 대조한다. 코드로 해석할 자료만 읽으며 모델/pickle/Torch를 불러오지 않는다. 기존 12개·288좌표 프레임에서 tip/투영과 BMC feature 계산을 확인했고 pipeline 138개가 통과했다(신규 7개). 물리 단위와 전체 관절 의미/당시 source 코드 복구는 미확인이다. 표면 tip에 고정 뼈대의 20개 길이 불변 규칙을 적용하지 않는다. [실제 기록·한계·다음 조건](https://github.com/mukgore/codex/blob/work/todo-consolidation-20261103/docs/deliveries/2026-11-14_mano_reference_mapping.md). 생체/운영 승인은 아니다.
+
 **2026-11-14 생체 feature/profile 진단:** `biomechanical_features.py`는 BMC 논문의 뼈/손바닥/local 각도 수식을 독립 구현하고, `biomechanical_profile.py`는 근거·단위·버전이 있는 수치 프로필과 시간/고정 길이 조건을 검사한다. 기본 프로필은 여섯 허용 범위 모두 미확인이다. 기존 접촉 모형은 손바닥 기준이 퇴화해 288프레임 모두 계산 불가였고, 다른 기본 template 192프레임은 계산 가능하나 범위 미확인으로 미통과다. 생물학적으로 타당한 동작만 생성하는 완성된 경로가 아니다.
 
 [논문 대응·실제 진단·단위/엄지·한계/다음 입력](https://github.com/mukgore/codex/blob/work/todo-consolidation-20261103/docs/deliveries/2026-11-14_biomechanical_features_and_profile.md). 전체 pipeline 131개 통과(신규 13개). 기존 연구 fixture/Stage7/prod는 이 진단으로 바꾸지 않았다. 생체 프로필이 없는 상태에서 랜덤 범위를 늘려 일반 문제 공급으로 승격하지 않는다.
