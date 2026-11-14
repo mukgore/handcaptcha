@@ -1,5 +1,9 @@
 # 자체 작성한 3D 동작 연결 시험
 
+**2026-11-14 생체 feature/profile 진단:** `biomechanical_features.py`는 BMC 논문의 뼈/손바닥/local 각도 수식을 독립 구현하고, `biomechanical_profile.py`는 근거·단위·버전이 있는 수치 프로필과 시간/고정 길이 조건을 검사한다. 기본 프로필은 여섯 허용 범위 모두 미확인이다. 기존 접촉 모형은 손바닥 기준이 퇴화해 288프레임 모두 계산 불가였고, 다른 기본 template 192프레임은 계산 가능하나 범위 미확인으로 미통과다. 생물학적으로 타당한 동작만 생성하는 완성된 경로가 아니다.
+
+[논문 대응·실제 진단·단위/엄지·한계/다음 입력](https://github.com/mukgore/codex/blob/work/todo-consolidation-20261103/docs/deliveries/2026-11-14_biomechanical_features_and_profile.md). 전체 pipeline 131개 통과(신규 13개). 기존 연구 fixture/Stage7/prod는 이 진단으로 바꾸지 않았다. 생체 프로필이 없는 상태에서 랜덤 범위를 늘려 일반 문제 공급으로 승격하지 않는다.
+
 **2026-11-14 표면/깊이 단서:** `surface_passes.py`가 capsule/구의 실제 앞뒤 표면을 계산하고 `depth_cue_audit.py`가 물체 표시/제거 × 단색/고정 조명의 네 조건을 비교한다. 12개 깊이 제어·48개 모드 사례 중 접촉 실패 16개는 격리했고, 32개 H.264·768프레임을 검사했다. pipeline 118개 통과. 두 뼈 proxy의 가림 밖 표면도 검사하되 전체 해부학을 보장하지 않는다. palm mesh·그림자·반사·물리/인체 검증은 없다.
 
 ```powershell

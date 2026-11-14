@@ -15,15 +15,22 @@ RULES=('bone_lengths','palm_curvatures','palm_spread_radians','joint_angle_hulls
 INTERVAL_SHAPES={'bone_lengths':(20,2),'palm_curvatures':(4,2),'palm_spread_radians':(4,2)}
 MAIN='https://jankautz.com/publications/WeaklySupervised3DHand_ECCV20.pdf'
 SUPPLEMENT='https://www.ecva.net/papers/eccv_2020/papers_ECCV/papers/123620205-supp.pdf'
+TEMPORAL_PLAN='https://github.com/mukgore/codex/blob/work/todo-consolidation-20261103/docs/3d_biomechanics_and_random_generation_2026-11-14.md'
 
 
 def pending_profile():
+    locators={'bone_lengths':'Main Sec.3.1 bone-length interval; numerical limits unresolved.',
+        'palm_curvatures':'Main Sec.3.1 Eq.1-2; numerical limits unresolved.',
+        'palm_spread_radians':'Main Sec.3.1 Eq.3; numerical limits unresolved.',
+        'joint_angle_hulls':'Main Eq.7 and supplement Sec.1; numerical admissible hulls unresolved.',
+        'angular_speed_rad_s':'Project temporal extension; BMC does not supply this dynamic limit.',
+        'angular_acceleration_rad_s2':'Project temporal extension; BMC does not supply this dynamic limit.'}
     return {'schema_version':1,'profile_version':'bmc21_limits_pending_v1','feature_version':VERSION,
         'length_unit':'authored_units','mapping_status':'unresolved',
         'mapping_evidence':'Numeric anatomical correspondence, units and thumb-specific limits are not established.',
         'rules':{name:{'status':'unresolved','values':None,'evidence':{
-            'url':SUPPLEMENT if name=='joint_angle_hulls' else MAIN,
-            'locator':'Formula only; no accepted numerical admissible limits for this rig.'}}
+            'url':SUPPLEMENT if name=='joint_angle_hulls' else TEMPORAL_PLAN if name.startswith('angular_') else MAIN,
+            'locator':locators[name]}}
             for name in RULES}}
 
 
