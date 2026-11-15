@@ -5,7 +5,7 @@ import unittest
 import numpy as np
 
 from experiments.motion_fixture.biomechanical_features import (BASES,GeometryError,extract,
-    signed_angles,rotation,angular_derivatives)
+    signed_angles,rotation,angular_derivatives,JOINT_LABELS,ANGLE_CHILD_LABELS,ANGLE_RECORDS)
 from experiments.motion_fixture.biomechanical_profile import pending_profile,validate,assess,polygon,hull_distance
 from experiments.motion_fixture.grasp_contacts import KINDS,records
 from dataset_pipeline.common import LANDMARK_NAMES
@@ -33,6 +33,28 @@ def synthetic_profile():
 
 
 class BiomechanicalProfileTests(unittest.TestCase):
+    def test_angle_center_and_bone_child_are_distinct_and_indexed(self):
+        records=extract(synthetic_hand(),handedness='right')['joint_angle_records']
+        self.assertEqual(len(records),15)
+        self.assertEqual([r['angle_index'] for r in records],list(range(15)))
+        self.assertEqual(JOINT_LABELS[3:6],('INDEX_MCP','INDEX_PIP','INDEX_DIP'))
+        self.assertEqual(ANGLE_CHILD_LABELS[3:6],('INDEX_PIP','INDEX_DIP','INDEX_TIP'))
+        self.assertEqual([records[i]['candidate_clinical_joint'] for i in (0,3,4,5)],['TMC','MCP','PIP','DIP'])
+        self.assertEqual(records[3]['incoming_bone_parent_point'],'WRIST')
+        self.assertEqual(records[4]['incoming_bone_parent_point'],'INDEX_MCP')
+        self.assertTrue(all(not r['clinical_axes_neutral_and_sign_verified'] for r in records))
+        records[0]['canonical_center_point']='modified returned metadata'
+        self.assertEqual(ANGLE_RECORDS[0]['canonical_center_point'],'THUMB_CMC')
+
+    def test_known_pinky_mcp_rotation_is_not_labeled_pip_or_clinical_approval(self):
+        result=extract(synthetic_hand(.3),handedness='right')
+        self.assertAlmostEqual(result['joint_angles_radians'][12,0],.3)
+        self.assertEqual(result['joint_angle_records'][12]['canonical_center_point'],'PINKY_MCP')
+        assessment=assess(np.array([synthetic_hand()]*3),[0.,1.,2.],pending_profile(),
+            handedness='right',length_unit='authored_units')
+        self.assertEqual(assessment['joint_angle_records'],result['joint_angle_records'])
+        self.assertFalse(assessment['evidence_backed_rule_checks_pass'])
+
     def test_surface_tip_motion_is_not_a_rigid_joint_edge_failure(self):
         poses=np.array([synthetic_hand()]*3)
         poses[1,20]+=(poses[1,20]-poses[1,19])*.01

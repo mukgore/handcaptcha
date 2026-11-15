@@ -14,7 +14,17 @@ from dataset_pipeline.common import LANDMARK_NAMES
 VERSION='bmc21_column_frames_signed_angles_v1'
 BASES=(1,5,9,13,17)
 BONE_LABELS=tuple(LANDMARK_NAMES[b] for b in BASES)+tuple(LANDMARK_NAMES[b+j] for b in BASES for j in (1,2,3))
-JOINT_LABELS=tuple(LANDMARK_NAMES[b+j] for b in BASES for j in (1,2,3))
+ANGLE_RECORD_VERSION='bmc_angle_center_child_and_clinical_candidate_v1'
+ANGLE_CHILD_LABELS=tuple(LANDMARK_NAMES[b+j] for b in BASES for j in (1,2,3))
+# An angle rotates the outgoing bone at its parent/center, not at its child.
+JOINT_LABELS=tuple(LANDMARK_NAMES[b+j-1] for b in BASES for j in (1,2,3))
+ANGLE_RECORDS=tuple({'angle_index':3*finger+j-1,
+    'canonical_center_point':LANDMARK_NAMES[b+j-1],
+    'incoming_bone_parent_point':LANDMARK_NAMES[0 if j==1 else b+j-2],
+    'outgoing_bone_child_point':LANDMARK_NAMES[b+j],
+    'candidate_clinical_joint':(('TMC','MCP','IP') if finger==0 else ('MCP','PIP','DIP'))[j-1],
+    'clinical_axes_neutral_and_sign_verified':False}
+    for finger,b in enumerate(BASES) for j in (1,2,3))
 
 
 class GeometryError(ValueError):
@@ -77,7 +87,9 @@ def extract(points, *, handedness):
             if not np.allclose(frame[:,2],bone,rtol=0,atol=1e-9):
                 raise GeometryError('LOCAL_FRAME_RECONSTRUCTION_MISMATCH')
     return {'feature_version':VERSION,'bone_lengths':lengths,'palm_curvatures':curvature,
-            'palm_spread_radians':spread,'joint_angles_radians':np.array(angles),'local_frames':np.array(frames)}
+            'palm_spread_radians':spread,'joint_angles_radians':np.array(angles),'local_frames':np.array(frames),
+            'angle_record_version':ANGLE_RECORD_VERSION,'joint_angle_records':[dict(r) for r in ANGLE_RECORDS],
+            'angle_representation':'signed_radians_in_BMC_column_frames_not_verified_clinical_MDH_angles'}
 
 
 def angular_derivatives(angles,times):

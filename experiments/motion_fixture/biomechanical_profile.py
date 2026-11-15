@@ -8,7 +8,7 @@ import math
 
 import numpy as np
 
-from .biomechanical_features import VERSION,BASES,GeometryError,extract,angular_derivatives
+from .biomechanical_features import VERSION,BASES,ANGLE_RECORD_VERSION,ANGLE_RECORDS,GeometryError,extract,angular_derivatives
 
 RULES=('bone_lengths','palm_curvatures','palm_spread_radians','joint_angle_hulls',
        'angular_speed_rad_s','angular_acceleration_rad_s2')
@@ -163,6 +163,7 @@ def assess(points,times,profile,*,handedness,length_unit,point_kinds=None):
     state='UNMEASURABLE_GEOMETRY' if errors else 'UNRESOLVED_LIMITS' if unresolved else 'RULE_VIOLATIONS' if violations else 'DECLARED_RULES_PASS'
     return {'scope':'sampled_bmc_features_and_declared_limits_only','state':state,'profile_version':profile['profile_version'],
         'feature_version':VERSION,'frames_n':len(raw),'measurable_frames_n':len(features),'geometry_errors':errors,
+        'angle_record_version':ANGLE_RECORD_VERSION,'joint_angle_records':[dict(r) for r in ANGLE_RECORDS],
         'rig_policy':rig_policy,'rigid_edges_checked_n':int(rigid.sum()),
         'rig_relative_numeric_tolerance':relative_tolerance,
         'unresolved_rules':unresolved,'violations':violations,'maximum_residual':maximum_residual,
