@@ -8,7 +8,7 @@ import math
 
 import numpy as np
 
-from .biomechanical_features import VERSION,GeometryError,extract,angular_derivatives
+from .biomechanical_features import VERSION,BASES,GeometryError,extract,angular_derivatives
 
 RULES=('bone_lengths','palm_curvatures','palm_spread_radians','joint_angle_hulls',
        'angular_speed_rad_s','angular_acceleration_rad_s2')
@@ -74,7 +74,7 @@ def validate(profile):
     fields={'schema_version','profile_version','feature_version','length_unit','mapping_status','mapping_evidence','rules'}
     if not isinstance(profile,dict) or set(profile)!=fields or type(profile['schema_version']) is not int or profile['schema_version']!=1 or profile['feature_version']!=VERSION:
         raise ValueError('Explicit supported biomechanical profile required')
-    if profile['length_unit'] not in ('m','mm','authored_units') or profile['mapping_status'] not in ('unresolved','synthetic_test','documented'):
+    if profile['length_unit'] not in ('m','mm','authored_units','model_native_units') or profile['mapping_status'] not in ('unresolved','synthetic_test','documented'):
         raise ValueError('Explicit units and mapping status required')
     if any(not isinstance(profile[k],str) or not profile[k].strip() for k in ('profile_version','mapping_evidence')):
         raise ValueError('Profile version and coordinate/thumb correspondence evidence required')
@@ -89,7 +89,7 @@ def validate(profile):
             raise ValueError('Traceable nonempty rule evidence required')
         if rule['status']=='evidence_backed' and (not {'url','locator','value_origin','population_and_scope'}.issubset(rule['evidence']) or not rule['evidence']['url'].startswith('https://')):
             raise ValueError('Sourced values need location, origin and applicability evidence')
-        if name=='bone_lengths' and rule['status']=='evidence_backed' and profile['length_unit']=='authored_units':
+        if name=='bone_lengths' and rule['status']=='evidence_backed' and profile['length_unit'] not in ('m','mm'):
             raise ValueError('Physical bone limits require established m/mm units, not uncalibrated authored units')
         if rule['status']=='unresolved':
             if rule['values'] is not None:raise ValueError('Unresolved limits cannot silently carry approved values')
@@ -109,11 +109,26 @@ def validate(profile):
     return parsed
 
 
-def assess(points,times,profile,*,handedness,length_unit):
+def assess(points,times,profile,*,handedness,length_unit,point_kinds=None):
     parsed=validate(profile);raw=np.asarray(points);times=np.asarray(times,float)
     if raw.ndim!=3 or raw.shape[1:]!=(21,3) or len(raw)<3 or times.shape!=(len(raw),) or not np.isfinite(times).all() or (np.diff(times)<=0).any():
         raise ValueError('Complete sampled 3D motion and increasing timestamps in seconds required')
     if length_unit!=profile['length_unit']:raise ValueError('Motion/profile length units differ')
+    children=list(BASES)+[b+j for b in BASES for j in (1,2,3)]
+    if point_kinds is None:
+        rigid=np.ones(20,dtype=bool);relative_tolerance=1e-8
+        rig_policy='authored_fixed_20_edges'
+    else:
+        expected=['mesh_surface_tip' if i in (4,8,12,16,20) else 'sdk_joint' for i in range(21)]
+        if not isinstance(point_kinds,list) or point_kinds!=expected:
+            raise ValueError('Explicit canonical 16 SDK joints and five surface tips required')
+        if raw.dtype.kind!='f' or raw.dtype.itemsize<4:
+            raise ValueError('SDK coordinates require float32 or higher precision')
+        rigid=np.array([point_kinds[i]=='sdk_joint' for i in children])
+        # Numerical precision allowance for forward SDK arrays, not anatomy limits.
+        precision=np.finfo(raw.dtype).eps if raw.dtype.kind=='f' else np.finfo(float).eps
+        relative_tolerance=max(1e-8,64*precision)
+        rig_policy='native_joint_edges_only_surface_tips_not_rigid'
     features=[];errors=[]
     for i,pose in enumerate(raw):
         try:features.append((i,extract(pose,handedness=handedness)))
@@ -133,8 +148,8 @@ def assess(points,times,profile,*,handedness,length_unit):
             if (residual>1e-10).any():violations.append({'frame_idx':index,'rule':'joint_angle_hulls','indices':np.flatnonzero(residual>1e-10).tolist()})
     if not errors:
         lengths=np.array([f['bone_lengths'] for _,f in features])
-        variation=np.abs(lengths-lengths[0]);tolerance=np.maximum(1e-10,lengths[0]*1e-8)
-        for index in np.flatnonzero((variation>tolerance).any(axis=1)):
+        variation=np.abs(lengths-lengths[0]);tolerance=np.maximum(1e-10,lengths[0]*relative_tolerance)
+        for index in np.flatnonzero(((variation>tolerance)&rigid).any(axis=1)):
             violations.append({'frame_idx':int(index),'rule':'fixed_generated_rig_bone_lengths'})
         angular=np.array([f['joint_angles_radians'] for _,f in features]);v,a=angular_derivatives(angular,times)
         for name,values in (('angular_speed_rad_s',v),('angular_acceleration_rad_s2',a)):
@@ -148,6 +163,8 @@ def assess(points,times,profile,*,handedness,length_unit):
     state='UNMEASURABLE_GEOMETRY' if errors else 'UNRESOLVED_LIMITS' if unresolved else 'RULE_VIOLATIONS' if violations else 'DECLARED_RULES_PASS'
     return {'scope':'sampled_bmc_features_and_declared_limits_only','state':state,'profile_version':profile['profile_version'],
         'feature_version':VERSION,'frames_n':len(raw),'measurable_frames_n':len(features),'geometry_errors':errors,
+        'rig_policy':rig_policy,'rigid_edges_checked_n':int(rigid.sum()),
+        'rig_relative_numeric_tolerance':relative_tolerance,
         'unresolved_rules':unresolved,'violations':violations,'maximum_residual':maximum_residual,
         'declared_rules_pass':passed,'evidence_backed_rule_checks_pass':passed and sourced,
         'biological_validity_proven':False,'full_generator_ready':False,'release_allowed':False,

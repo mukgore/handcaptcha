@@ -33,6 +33,36 @@ def synthetic_profile():
 
 
 class BiomechanicalProfileTests(unittest.TestCase):
+    def test_surface_tip_motion_is_not_a_rigid_joint_edge_failure(self):
+        poses=np.array([synthetic_hand()]*3)
+        poses[1,20]+=(poses[1,20]-poses[1,19])*.01
+        kinds=['mesh_surface_tip' if i in (4,8,12,16,20) else 'sdk_joint' for i in range(21)]
+        result=assess(poses,[0.,1.,2.],synthetic_profile(),handedness='right',length_unit='authored_units',point_kinds=kinds)
+        self.assertEqual(result['rigid_edges_checked_n'],15)
+        self.assertFalse(any(v['rule']=='fixed_generated_rig_bone_lengths' for v in result['violations']))
+        poses[1,18]+=[0.,0.,.05]
+        result=assess(poses,[0.,1.,2.],synthetic_profile(),handedness='right',length_unit='authored_units',point_kinds=kinds)
+        self.assertTrue(any(v['rule']=='fixed_generated_rig_bone_lengths' for v in result['violations']))
+
+    def test_native_units_keep_limits_unresolved_and_refuse_physical_approval(self):
+        profile=pending_profile();profile['length_unit']='model_native_units'
+        kinds=['mesh_surface_tip' if i in (4,8,12,16,20) else 'sdk_joint' for i in range(21)]
+        result=assess(np.array([synthetic_hand()]*3,dtype=np.float32),[0.,1.,2.],profile,
+            handedness='right',length_unit='model_native_units',point_kinds=kinds)
+        self.assertEqual(result['state'],'UNRESOLVED_LIMITS')
+        self.assertFalse(result['evidence_backed_rule_checks_pass'])
+        self.assertLess(result['rig_relative_numeric_tolerance'],1e-5)
+        rule=profile['rules']['bone_lengths'];rule.update(status='evidence_backed',values=[[.1,2.]]*20,
+            evidence={'url':'https://example.invalid/test','locator':'fixture','value_origin':'fixture','population_and_scope':'fixture'})
+        with self.assertRaises(ValueError):validate(profile)
+
+    def test_incorrect_point_kinds_and_low_precision_sdk_are_rejected(self):
+        poses=np.array([synthetic_hand()]*3)
+        kinds=['mesh_surface_tip' if i in (4,8,12,16,20) else 'sdk_joint' for i in range(21)]
+        for bad in (kinds[:-1],['sdk_joint']*21):
+            with self.assertRaises(ValueError):assess(poses,[0.,1.,2.],pending_profile(),handedness='right',length_unit='authored_units',point_kinds=bad)
+        with self.assertRaises(ValueError):assess(poses.astype(np.float16),[0.,1.,2.],pending_profile(),handedness='right',length_unit='authored_units',point_kinds=kinds)
+
     def test_straight_fan_has_expected_lengths_zero_curvature_and_zero_local_angles(self):
         p=synthetic_hand();f=extract(p,handedness='right')
         np.testing.assert_allclose(f['bone_lengths'][5:],np.tile([.2,.15,.1],5),atol=1e-12)
