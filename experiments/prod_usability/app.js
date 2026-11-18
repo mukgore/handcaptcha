@@ -6,23 +6,54 @@ const selector=new UsabilitySelection.Selector();
 const nativeResults=onRes,nativeStart=startRealChallenge,nativeResult=showResult,nativeKeyframe=showKeyframeImage;
 const cameraArea=document.querySelector('.camera-area');
 const panel=cameraArea.closest('.trial-panel');
-panel.querySelector('.panel-title').textContent='목표 영상 + 내 카메라';
+panel.querySelector('.panel-title').remove();
 panel.querySelector('.panel-header').appendChild(document.getElementById('kfLabel'));
-cameraArea.append(document.getElementById('kfInfo'),document.getElementById('matchInd'));
-const layerLabel=document.createElement('div');layerLabel.className='layer-label';layerLabel.textContent='목표 42% · 내 카메라';cameraArea.append(layerLabel);
-const hint=document.createElement('div');hint.id='selectionState';hint.setAttribute('role','status');hint.textContent='손 전체를 화면 중앙에 크게 보여 주세요. 가장 큰 손이 안정되면 선택합니다.';panel.append(hint);
+cameraArea.append(document.getElementById('kfInfo'));
+const hint=document.getElementById('statusBar');
+hint.setAttribute('role','status');
 const controls=document.createElement('div');controls.className='usability-controls';
-controls.innerHTML='<label>목표 투명도 <input id="targetOpacity" aria-label="목표 투명도" type="range" min="20" max="65" value="42"> <output id="opacityValue">42%</output></label><button id="restartAttempt" type="button">처음부터 다시 시작</button><button id="saveEvents" type="button">선택 기록 저장</button>';
+controls.innerHTML='<button id="restartAttempt" type="button">처음부터 다시 시작</button>';
 document.getElementById('screenTrial').append(controls);
 const saveButton=document.createElement('button');saveButton.id='saveResult';saveButton.className='btn btn-secondary';saveButton.textContent='결과 JSON 저장';saveButton.disabled=true;
 document.querySelector('#screenResult .btn-row').prepend(saveButton);
-document.querySelector('#introBanner span').textContent='손을 중앙에 크게 보여 주세요. 초록 테두리로 선택되면 겹쳐 보이는 가림 목표 영상을 따라 하세요.';
-const opacity=document.getElementById('targetOpacity');
-opacity.oninput=()=>{document.getElementById('opacityValue').value=opacity.value+'%';layerLabel.textContent='목표 '+opacity.value+'% · 내 카메라';};
+const targetOpacity=0.42;
 function download(value,name){const url=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 saveButton.onclick=()=>{if(saveableResult)download(saveableResult,'hand_captcha_result.json');};
-document.getElementById('saveEvents').onclick=()=>download({policy:UsabilitySelection.DEFAULTS,events:selectionEvents},'hand_selection_events.json');
 document.getElementById('restartAttempt').onclick=()=>location.reload();
+let restartNotice='', frameSelection=null, assetError=false;
+function showHint(text, tone='waiting', centered=false){
+  const container=centered?cameraArea:panel;
+  if(hint.parentElement!==container)container.append(hint);
+  hint.className='status-bar '+tone+(centered?' center-hint':'');
+  if(hint.textContent!==text)hint.textContent=text;
+}
+function showGuidance(){
+  if(runInvalidated||runFinished||assetError)return;
+  if(phase==='detecting_hand'){
+    if(restartNotice&&performance.now()<restartNoticeUntil&&!frameSelection?.ready){showHint(restartNotice,'waiting',true);return;}
+    if(frameSelection?.ready&&selectedHand){showHint('따라 할 반투명 손 영상을 준비하고 있어요.','waiting',true);return;}
+    if(frameSelection?.reason==='similar_sizes'){showHint('따라 할 손 하나를 카메라에 더 가까이 보여 주세요.','waiting',true);return;}
+    if(frameSelection?.reason==='stabilizing'||frameSelection?.ready){showHint('손을 고르는 동안 지금 위치에 잠시 유지해 주세요.','waiting',true);return;}
+    showHint('손 전체를 화면 중앙에 크게 비춰 주세요.','waiting',true);
+    return;
+  }
+  if(phase!=='matching'&&phase!=='recording')return;
+  if(frameSelection?.reason==='missing_or_small'){
+    showHint('계속하려면 초록 테두리로 선택했던 손을 다시 비춰 주세요. 1.5초 이상 벗어나면 처음부터 시작합니다.');
+  }else if(targetPending){
+    showHint('다음 목표 화면을 준비하고 있어요. 초록 테두리의 손을 유지해 주세요.');
+  }else if(videoPlaying){
+    showHint('초록 테두리의 손을 반투명 목표 손과 겹쳐, 영상의 움직임을 따라 하세요.','playing');
+  }else if(matchHoldStart!==null){
+    showHint('자세가 맞았어요. 반투명 손과 겹친 상태를 잠시 유지해 주세요.','complete');
+  }else{
+    showHint('초록 테두리의 내 손을 반투명 손에 겹치고, 가림 밖으로 보이는 손가락 모양을 따라 하세요.');
+  }
+}
+// Keep production error and completion messages in the same status area.
+setS=function(tone,text){
+  if(phase==='idle'||phase==='invalidated'||tone==='complete')showHint(text.replace(/^✅\s*/,''),tone);
+};
 function recordSelection(reason){if(selectionEvents.length>=500)selectionEvents.shift();selectionEvents.push({reason,t_ms:performance.now(),phase});}
 function clearAttempt(){
   matchHoldStart=null;handednessBuffer=[];selectedHand=null;lastLm=null;targetLm=null;
@@ -34,8 +65,7 @@ function invalidateAttempt(reason){
   if(reason==='tracking_timeout'||reason==='ambiguous_crossing'){restartForHand(reason);return;}
   recordSelection(reason);runInvalidated=true;clearAttempt();phase='invalidated';
   if(animId)cancelAnimationFrame(animId);if(camStream)camStream.getTracks().forEach(t=>t.stop());
-  hint.textContent='선택한 손을 잃었거나 구분하기 어렵습니다. 현재 시도를 폐기했습니다. 처음부터 다시 시작해 주세요.';
-  setS('waiting','선택 해제 · 이전 관문과 기록 초기화 완료');updateMatchIndicator('waiting','처음부터 다시 시작해 주세요');
+  showHint('손 추적을 계속할 수 없습니다. 처음부터 다시 시작해 주세요.');
 }
 function restartForHand(reason){
   recordSelection(reason);attemptEpoch++;
@@ -47,19 +77,20 @@ function restartForHand(reason){
   document.getElementById('frameCounter').textContent='0 프레임';
   restartNoticeUntil=performance.now()+4000;
   const notice=reason==='ambiguous_crossing'?'선택한 손을 구분하기 어려워 재시작합니다.':'손이 1.5초 이상 이탈해 재시작합니다.';
-  hint.textContent=notice+' 손 전체를 화면 중앙에 보여 주세요.';
-  setS('waiting',notice+' 손을 보여 주세요.');updateMatchIndicator('waiting','손을 보여 주세요');
+  restartNotice=notice+' 손 전체를 화면 중앙에 보여 주세요.';
+  frameSelection=null;showGuidance();
   // Keep the original camera/model loop running; the next packet begins fresh acquisition.
   paintComposite();
 }
 function showAssetError(error){
+  assetError=true;
   console.error(error);document.getElementById('loadingOverlay').classList.add('hidden');
-  document.getElementById('cameraPlaceholder').textContent='모델·문제 자산을 불러오지 못했습니다. 서버 실행과 인터넷 연결을 확인한 뒤 다시 시작하세요.';
-  setS('waiting','자산 로딩 실패: '+String(error.message||error));
+  document.getElementById('cameraPlaceholder').style.display='none';
+  showHint('문제나 모델을 불러오지 못했습니다. 연결을 확인한 뒤 다시 시작해 주세요.','waiting',true);
 }
 startRealChallenge=function(){if(!runInvalidated)nativeStart();};
 showResult=function(){if(runInvalidated||runFinished)return;runFinished=true;rv.pause();nativeResult();};
-rv.addEventListener('error',()=>{if(!runInvalidated){invalidateAttempt('target_video_error');hint.textContent='목표 영상 로딩 실패. 서버 자산을 확인한 뒤 다시 시작하세요.';}});
+rv.addEventListener('error',()=>{if(!runInvalidated){invalidateAttempt('target_video_error');showHint('목표 영상 로딩 실패. 서버 자산을 확인한 뒤 다시 시작하세요.');}});
 function drawContained(source,alpha,mirror){
   const w=source.videoWidth||source.width,h=source.videoHeight||source.height;if(!w||!h)return;
   const s=Math.min(cc.width/w,cc.height/h);ctx.save();ctx.globalAlpha=alpha;
@@ -86,7 +117,7 @@ function paintComposite(){
   if(!cameraBase.width||!cameraBase.height)return;
   ctx.clearRect(0,0,cc.width,cc.height);ctx.drawImage(cameraBase,0,0);
   rememberTarget();
-  if(targetFrame.width)drawContained(targetFrame,Number(opacity.value)/100,targetFrameMirror);
+  if(targetFrame.width)drawContained(targetFrame,targetOpacity,targetFrameMirror);
   if(displayedHand){
     const b=displayedHand.box;const track=camStream?.getVideoTracks()[0],settings=track?.getSettings()||{};
     const front=settings.facingMode==='user'||track?.label.toLowerCase().includes('front');
@@ -102,6 +133,7 @@ onRes=function(result){
   if(lastCallback!==null&&now-lastCallback>=200)matchHoldStart=null;
   lastCallback=now;
   const chosen=selector.update(result.multiHandLandmarks,now);
+  frameSelection=chosen;
   if(chosen.reason!==previousReason){recordSelection(chosen.reason);previousReason=chosen.reason;}
   if(chosen.state==='lost'){invalidateAttempt(chosen.reason);return;}
   if(!chosen.ready){matchHoldStart=null;handednessBuffer=[];}
@@ -114,9 +146,9 @@ onRes=function(result){
   displayedHand=hand;
   if(cameraBase.width!==cc.width||cameraBase.height!==cc.height){cameraBase.width=cc.width;cameraBase.height=cc.height;}
   cameraBase.getContext('2d').drawImage(cc,0,0);
-  if(hand||now>=restartNoticeUntil)hint.textContent=hand?'초록 테두리 손을 선택했습니다. 목표 동작을 따라 하세요.':chosen.reason==='similar_sizes'?'손 하나를 다른 손보다 더 가까이 보여 주세요.':chosen.reason==='missing_or_small'?'선택한 손을 다시 크게 보여 주세요. 1.5초 이상 이탈하면 자동 재시작합니다.':chosen.state==='stabilizing'?'큰 손을 잠시 안정적으로 유지해 주세요.':'손 전체를 조금 더 가까이 보여 주세요.';
   // Render only; inference always receives cv, never this composite.
   paintComposite();
+  showGuidance();
 };
 const watchdog=setInterval(()=>{if(!runInvalidated&&!runFinished&&selector.state==='selected'&&performance.now()-selector.lastSeen>UsabilitySelection.DEFAULTS.missingMs)invalidateAttempt('tracking_timeout');},100);
 addEventListener('pagehide',()=>{clearInterval(watchdog);cancelAnimationFrame(displayRaf);if(camStream)camStream.getTracks().forEach(t=>t.stop());rv.pause();},{once:true});

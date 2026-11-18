@@ -1,6 +1,6 @@
 // Development regression only. Synthetic camera/landmarks do not establish human usability.
 const {chromium}=require(process.env.PLAYWRIGHT_CORE||'../../../qa/node_modules/playwright-core');
-const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
+const assert=require('node:assert/strict'),fs=require('node:fs');
 const base='http://127.0.0.1:8770/experiments/prod_usability/';
 let browser;
 (async()=>{
@@ -11,6 +11,12 @@ let browser;
   page.on('pageerror',e=>errors.push(String(e)));page.on('requestfailed',r=>failed.push({url:r.url(),error:r.failure()}));
   await page.goto(base);
   await page.waitForFunction(()=>typeof phase!=='undefined'&&phase==='detecting_hand'&&cv.readyState>=2,{},{timeout:60000});
+  const guidance=page.locator('#statusBar');
+  assert.match(await guidance.textContent(),/화면 중앙/);
+  const stage=await page.locator('.camera-area').boundingBox(), prompt=await guidance.boundingBox();
+  assert.ok(Math.abs(stage.y+stage.height/2-prompt.y-prompt.height/2)<2);
+  assert.ok(Math.abs(stage.x+stage.width/2-prompt.x-prompt.width/2)<2);
+  assert.equal(await page.locator('.header:visible, .intro-banner:visible, .trial-panel .panel-title:visible, #targetOpacity, #saveEvents, .layer-label').count(),0);
   console.log('PASS real page + pinned MediaPipe model + synthetic camera + local manifest');
   await page.evaluate(()=>{cancelAnimationFrame(animId);runFinished=true;});await page.waitForTimeout(500);
   await page.evaluate(()=>{
@@ -23,7 +29,10 @@ let browser;
     },70);
   });
   await page.waitForFunction(()=>typeof keyframes!=='undefined'&&keyframes.length>0&&rv.readyState>=2,{},{timeout:20000});
-  await page.waitForTimeout(800);await page.screenshot({path:path.join(__dirname,'preview.png')});
+  await page.waitForFunction(()=>hint.parentElement===panel&&hint.textContent.includes('반투명'));
+  assert.equal(await page.locator('#screenTrial [role="status"]:visible, #matchInd:visible').count(),1);
+  if(process.env.CAPTCHA_SCREENSHOT)await page.screenshot({path:process.env.CAPTCHA_SCREENSHOT});
+  console.log('PASS centered acquisition prompt, one imitation instruction, requested controls absent');
   console.log('DISPLAY',await page.evaluate(()=>({canvas:[cc.width,cc.height],video:[rv.videoWidth,rv.videoHeight],camera:[cv.videoWidth,cv.videoHeight],pixel:[...ctx.getImageData(100,100,1,1).data]})));
   try{await page.waitForFunction(()=>runFinished&&document.getElementById('screenResult').classList.contains('active'),{},{timeout:60000});}
   catch(e){console.error(await page.evaluate(()=>({phase,runInvalidated,selectorState:selector.state,kfIdx,events:selectionEvents,body:document.body.innerText})));throw e;}

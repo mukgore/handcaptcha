@@ -17,7 +17,7 @@ once('maxNumHands:1','maxNumHands:4');
 once('hands.onResults(onRes);','hands.onResults(result => onRes(result));');
 once('await loadPoolManifest();', 'await loadPoolManifest();\n    if(!poolManifest || !Array.isArray(poolManifest.clips) || poolManifest.clips.length<2) throw Error("pool_manifest.json: at least two clips required");');
 once('const SAVE_LOCAL_JSON = false;', 'const SAVE_LOCAL_JSON = false; // Explicit result-save button below.');
-once("version: 'prod_v2_pool'", "version: 'prod_usability_v2'");
+once("version: 'prod_v2_pool'", "version: 'prod_usability_v3'");
 // Sequence loading must never publish a previous attempt after an automatic reset.
 const sequenceStart=html.indexOf('async function genSequence(){');
 const sequenceEnd=html.indexOf('// ===== FRAMING GUIDE',sequenceStart);
@@ -32,7 +32,8 @@ once('function beginNextTransition(){','function beginNextTransition(){\n    con
 once('const checkLoop = () => {', 'const checkLoop = () => {\n            if(runInvalidated || runFinished || transitionEpoch!==attemptEpoch) return;');
 once('setTimeout(showResult, 500);', 'const completionEpoch=attemptEpoch; setTimeout(() => { if(!runInvalidated && completionEpoch===attemptEpoch) showResult(); }, 500);');
 once('(async function loop(){ if(cv.readyState>=2) await hands.send({image:cv}); animId = requestAnimationFrame(loop); })();', '(async function loop(){ if(runInvalidated || runFinished)return; try { if(cv.readyState>=2) await hands.send({image:cv}); } catch(e) { invalidateAttempt("inference_error"); return; } if(!runInvalidated && !runFinished) animId = requestAnimationFrame(loop); })();');
-once("}catch(e){ document.getElementById('cameraPlaceholder').textContent = '카메라 접근이 거부되었습니다.'; }", "}catch(e){ document.getElementById('cameraPlaceholder').textContent = '카메라를 열 수 없습니다 ('+e.name+'). 주소창 카메라 권한·다른 앱 사용 여부를 확인한 뒤 다시 시작하세요.'; }");
+once("}catch(e){ document.getElementById('cameraPlaceholder').textContent = '카메라 접근이 거부되었습니다.'; }", "}catch(e){ document.getElementById('cameraPlaceholder').style.display='none'; showHint('카메라를 열 수 없습니다 ('+e.name+'). 주소창 카메라 권한·다른 앱 사용 여부를 확인한 뒤 다시 시작하세요.','waiting',true); }");
+once('await initCam();','showGuidance();\n    await initCam();');
 once('drawFramingGuideOverlay(performance.now());', '/* Display uses only the existing masked video; no extra pose overlay. */');
 once('maybeShowGhostFallback();', '/* Do not expose the hidden target as a landmark ghost. */');
 once('sendResult(JSON.stringify(result));', 'saveableResult = {...result, selection: {policy: UsabilitySelection.DEFAULTS, events: selectionEvents.slice()}};\n    document.getElementById("saveResult").disabled = false;\n    sendResult(JSON.stringify(result));');

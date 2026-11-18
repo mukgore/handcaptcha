@@ -728,7 +728,7 @@ async function initCam(){
         cc.width = cv.videoWidth||640; cc.height = cv.videoHeight||480;
         document.getElementById('cameraPlaceholder').style.display = 'none'; cc.style.display = 'block';
         (async function loop(){ if(runInvalidated || runFinished)return; try { if(cv.readyState>=2) await hands.send({image:cv}); } catch(e) { invalidateAttempt("inference_error"); return; } if(!runInvalidated && !runFinished) animId = requestAnimationFrame(loop); })();
-    }catch(e){ document.getElementById('cameraPlaceholder').textContent = '카메라를 열 수 없습니다 ('+e.name+'). 주소창 카메라 권한·다른 앱 사용 여부를 확인한 뒤 다시 시작하세요.'; }
+    }catch(e){ document.getElementById('cameraPlaceholder').style.display='none'; showHint('카메라를 열 수 없습니다 ('+e.name+'). 주소창 카메라 권한·다른 앱 사용 여부를 확인한 뒤 다시 시작하세요.','waiting',true); }
 }
 
 function onRes(r){
@@ -897,7 +897,7 @@ function showResult(){
     if(camStream) camStream.getTracks().forEach(t => t.stop());
 
     const result = {
-        experimentInfo: {participantId: pid, selectedHand, timestamp: Date.now(), version: 'prod_usability_v2'},
+        experimentInfo: {participantId: pid, selectedHand, timestamp: Date.now(), version: 'prod_usability_v3'},
         keyframes: keyframes.map(kf => ({clip: kf.clip.clip_id, frameIdx: kf.frameIdx})),
         segments: segments.map(seg => ({
             fromKf: seg.fromKf, toKf: seg.toKf,
@@ -980,6 +980,7 @@ async function bootstrap(){
     sessionLog = [];
     updateMatchIndicator('waiting', '손을 비춰주세요');
     setS('waiting', '손을 비춰주세요');
+    showGuidance();
     await initCam();
 }
 /* bootstrap starts after selection and display integration */
