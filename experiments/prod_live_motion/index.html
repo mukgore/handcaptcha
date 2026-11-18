@@ -3,7 +3,7 @@
 <head>
     <base href="../../">
     <link rel="stylesheet" href="experiments/prod_live_motion/live.css">
-    <link rel="stylesheet" href="experiments/prod_usability_v4/ui.css">
+    <link rel="stylesheet" href="experiments/prod_usability_v5/ui.css">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>손동작 CAPTCHA · 실시간 생성</title>
@@ -820,7 +820,7 @@ function onRes(r){
 
     const userLm = rawLm;
 
-    if(phase === 'matching' && kfIdx < keyframes.length && targetLm){
+    if(phase === 'matching' && kfIdx < keyframes.length && targetLm && !targetPreviewActive()){
         const uPP = ppSingle(userLm), tPP = ppSingle(targetLm);
         const err = angleErr(uPP, tPP);
         if(err < MATCH_ANGLE_THRESH){
@@ -912,7 +912,7 @@ function showResult(){
     if(camStream) camStream.getTracks().forEach(t => t.stop());
 
     const result = {
-        experimentInfo: {participantId: pid, selectedHand, timestamp: Date.now(), version: 'prod_live_motion_v3', motion_source: motionMode, motion_sources: [...presentedModes]},
+        experimentInfo: {participantId: pid, selectedHand, timestamp: Date.now(), version: 'prod_live_motion_v4', motion_source: motionMode, motion_sources: [...presentedModes]},
         keyframes: keyframes.map(kf => ({clip: kf.clip.clip_id, frameIdx: kf.frameIdx})),
         segments: segments.map(seg => ({
             fromKf: seg.fromKf, toKf: seg.toKf,
@@ -1002,10 +1002,10 @@ async function bootstrap(){
 }
 /* bootstrap starts after selection and display integration */
 </script>
-<script src="experiments/prod_usability_v4/selector.js"></script>
-<script src="experiments/prod_usability_v4/app.js"></script>
-<script src="experiments/prod_live_motion/motion.js?v=3"></script>
-<script src="experiments/prod_live_motion/live.js?v=2"></script>
+<script src="experiments/prod_usability_v5/selector.js"></script>
+<script src="experiments/prod_usability_v5/app.js"></script>
+<script src="experiments/prod_live_motion/motion.js?v=4"></script>
+<script src="experiments/prod_live_motion/live.js?v=4"></script>
 <script>bootstrap().catch(showAssetError);</script>
 </body>
 </html>

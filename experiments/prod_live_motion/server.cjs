@@ -4,7 +4,7 @@ const path = require('node:path');
 
 const root = path.resolve(__dirname, '../..');
 const prefix = 'experiments/prod_live_motion/';
-const visualBase = 'experiments/prod_usability_v4/';
+const visualBase = 'experiments/prod_usability_v5/';
 const port = Number(process.argv[2] ?? 8772);
 const manifest = JSON.parse(fs.readFileSync(path.join(root, 'pool_manifest.json'), 'utf8'));
 const allow = new Set([

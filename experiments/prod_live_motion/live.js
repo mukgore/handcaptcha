@@ -31,15 +31,35 @@ experimentLabel.textContent = '가림 손동작 체험 · 결과는 이 브라�
 controls.after(experimentLabel);
 
 let liveTarget = null;
+const openingPreviewMs = 300;
+
+function targetPreviewActive() {
+  return liveTarget?.epoch === attemptEpoch && liveTarget.drawnMasked === false;
+}
+
 function liveTime() {
   return Math.min(liveTarget.end, liveTarget.start + (performance.now() - liveTarget.startedAt) / 1000);
 }
 
 function setLiveTarget(keyframe, end = keyframe.time) {
-  if (!liveTarget || liveTarget.epoch !== attemptEpoch) presentedModes.clear();
-  liveTarget = { keyframe, start: keyframe.time, end, startedAt: performance.now(), epoch: attemptEpoch, drawnAt: -1, drawnMode: null };
+  const newAttempt = liveTarget?.epoch !== attemptEpoch;
+  if (newAttempt) presentedModes.clear();
+  const openingPose = newAttempt && keyframe === keyframes[0] && end === keyframe.time;
+  liveTarget = { keyframe, start: keyframe.time, end, startedAt: performance.now(), epoch: attemptEpoch,
+    previewUntil: openingPose ? null : 0, drawnAt: -1, drawnMode: null, drawnMasked: null };
   rememberTarget();
 }
+
+const showV5Guidance = showGuidance;
+showGuidance = function () {
+  // V5 checks the MP4 element for buffering. Generated frames use the canvas.
+  if (motionMode !== 'recorded' && phase === 'recording' && videoPlaying && !targetPending &&
+      frameSelection?.ready && !runInvalidated && !runFinished && !assetError) {
+    showHint('따라 할 손을 보고 같은 동작을 해보세요.','playing');
+    return;
+  }
+  showV5Guidance();
+};
 
 const rememberRecordedTarget = rememberTarget;
 rememberTarget = function () {
@@ -50,10 +70,13 @@ rememberTarget = function () {
   if (!liveTarget || liveTarget.epoch !== attemptEpoch) return;
   const { keyframe } = liveTarget;
   const time = Math.floor(liveTime() * keyframe.fps + 1e-6) / keyframe.fps;
-  if (time === liveTarget.drawnAt && motionMode === liveTarget.drawnMode) return;
-  LiveMotion.paint(targetFrame, keyframe.clip, time, keyframe.mirror, motionMode);
+  const masked = liveTarget.previewUntil !== null && performance.now() >= liveTarget.previewUntil;
+  if (time === liveTarget.drawnAt && motionMode === liveTarget.drawnMode && masked === liveTarget.drawnMasked) return;
+  LiveMotion.paint(targetFrame, keyframe.clip, time, keyframe.mirror, motionMode, masked);
+  liveTarget.previewUntil ??= performance.now() + openingPreviewMs;
   liveTarget.drawnAt = time;
   liveTarget.drawnMode = motionMode;
+  liveTarget.drawnMasked = masked;
   presentedModes.add(motionMode);
   targetPending = false;
   targetPlaceholder.hidden = true;

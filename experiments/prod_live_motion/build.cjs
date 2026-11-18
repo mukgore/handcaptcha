@@ -1,16 +1,16 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const source = path.join(__dirname, '../prod_usability_v4/index.html');
+const source = path.join(__dirname, '../prod_usability_v5/index.html');
 const baseline = fs.readFileSync(source, 'utf8').replaceAll('\r\n', '\n');
 const digest = crypto.createHash('sha256').update(baseline).digest('hex');
-if (digest !== '5d06d5d7c129585c068bd60ff25fab3c2bb2c007699a7ca4055d547319fe0ae8') {
-  throw new Error('Review changes to the V4 baseline before rebuilding');
+if (digest !== '8ac37e689f9e181371532d7c40ddee360d4c68d03c9bc82b0a69043d49d4ffb3') {
+  throw new Error('Review changes to the V5 baseline before rebuilding');
 }
 let html = baseline;
 
 function replace(original, replacement) {
-  if (html.split(original).length !== 2) throw new Error('V4 hook changed: ' + original);
+  if (html.split(original).length !== 2) throw new Error('V5 hook changed: ' + original);
   html = html.replace(original, replacement);
 }
 
@@ -28,6 +28,8 @@ replace('    const src = POOL_BASE + kf.clip.video_file;', `    if(kf.clip.frame
         return;
     }
     const src = POOL_BASE + kf.clip.video_file;`);
+replace("    if(phase === 'matching' && kfIdx < keyframes.length && targetLm){",
+  "    if(phase === 'matching' && kfIdx < keyframes.length && targetLm && !targetPreviewActive()){");
 replace('        rv.currentTime = fromKf.time;\n        rv.play();', `        if(toKf.clip.frames){
             setLiveTarget(fromKf, toKf.time);
         } else {
@@ -41,13 +43,13 @@ replace('            if(rv.currentTime >= stopTime - 0.05 || rv.error || perform
 replace("                rv.pause();\n                videoPlaying = false;", `                if(toKf.clip.frames) setLiveTarget(toKf);
                 else rv.pause();
                 videoPlaying = false;`);
-replace("version: 'prod_usability_v4'",
-  "version: 'prod_live_motion_v3', motion_source: motionMode, motion_sources: [...presentedModes]");
+replace("version: 'prod_usability_v5'",
+  "version: 'prod_live_motion_v4', motion_source: motionMode, motion_sources: [...presentedModes]");
 replace('    await loadPoolManifest();\n    if(!poolManifest || !Array.isArray(poolManifest.clips) || poolManifest.clips.length<2) throw Error("pool_manifest.json: at least two clips required");', `    if(motionMode === 'recorded'){
         await loadPoolManifest();
         if(!poolManifest || !Array.isArray(poolManifest.clips) || poolManifest.clips.length<2) throw Error("pool_manifest.json: at least two clips required");
     }`);
-replace('<script>bootstrap().catch(showAssetError);</script>', `<script src="experiments/prod_live_motion/motion.js?v=3"></script>
-<script src="experiments/prod_live_motion/live.js?v=2"></script>
+replace('<script>bootstrap().catch(showAssetError);</script>', `<script src="experiments/prod_live_motion/motion.js?v=4"></script>
+<script src="experiments/prod_live_motion/live.js?v=4"></script>
 <script>bootstrap().catch(showAssetError);</script>`);
 fs.writeFileSync(path.join(__dirname, 'index.html'), html);

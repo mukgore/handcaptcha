@@ -28,10 +28,29 @@ async function check(browser, mode) {
     await page.waitForFunction(() => phase === 'detecting_hand' && cv.readyState >= 2, null, { timeout: 60000 });
     assert.equal(await page.locator('.motion-control select').inputValue(), mode);
     // Inspect the target integration independently of gesture classification.
-    await page.evaluate(async () => {
+    const opening = await page.evaluate(async () => {
       selectedHand = 'right';
       await genSequence();
       startRealChallenge();
+      if (motionMode === 'recorded') return null;
+      const pixel = () => [...targetFrame.getContext('2d').getImageData(258, 228, 1, 1).data];
+      const firstPixel = pixel();
+      const deadline = liveTarget.previewUntil;
+      const during = { active: targetPreviewActive(), firstPixel, deadlineStable: true };
+      const initialMode = motionMode;
+      modeSelect.value = motionMode === '3d' ? '2d' : '3d';
+      modeSelect.dispatchEvent(new Event('change'));
+      during.deadlineStable = liveTarget.previewUntil === deadline;
+      modeSelect.value = initialMode;
+      modeSelect.dispatchEvent(new Event('change'));
+      await new Promise(resolve => {
+        const waitForPaint = () => {
+          if (targetPreviewActive()) requestAnimationFrame(waitForPaint);
+          else resolve();
+        };
+        requestAnimationFrame(waitForPaint);
+      });
+      return { ...during, elapsed: performance.now() - (deadline - 300), maskedPixel: pixel(), time: liveTime() };
     });
     await page.waitForFunction(() => targetFrame.width > 0 && !targetPending);
     const before = await page.evaluate(() => ({
@@ -44,6 +63,12 @@ async function check(browser, mode) {
       assert.ok(requests.some(url => url.endsWith('.mp4')));
       return before.scoreFns;
     }
+    const masked = [7, 11, 16, 255];
+    assert.ok(opening.active && opening.deadlineStable);
+    assert.notDeepEqual(opening.firstPixel, masked);
+    assert.deepEqual(opening.maskedPixel, masked);
+    assert.ok(opening.elapsed >= 300);
+    assert.equal(opening.time, 0);
     assert.match(before.clip, /^live-/);
     assert.ok(!requests.some(url => /pool_manifest\.json|\.mp4|landmarks\.json/.test(url)));
     const otherMode = mode === '3d' ? '2d' : '3d';
@@ -71,11 +96,17 @@ async function check(browser, mode) {
     }));
     assert.equal(after.clip, before.clip);
     assert.notEqual(after.image, before.image);
-    const masked = [7, 11, 16, 255];
     assert.deepEqual(after.maskPixels.slice(0, 4), Array(4).fill(masked));
     for (const pixel of after.maskPixels.slice(4)) assert.notDeepEqual(pixel, masked);
+    const nextClip = await page.evaluate(() => {
+      const nextIndex = keyframes.findIndex(kf => kf.clip !== keyframes[0].clip);
+      showKeyframeImage(nextIndex);
+      return { preview: targetPreviewActive(),
+        pixel: [...targetFrame.getContext('2d').getImageData(258, 228, 1, 1).data] };
+    });
+    assert.deepEqual(nextClip, { preview: false, pixel: masked });
     assert.deepEqual(errors, []);
-    console.log(`PASS ${mode}: initialized capture, generated masked frames, played and held the next pose`);
+    console.log(`PASS ${mode}: V5 capture, ${Math.round(opening.elapsed)} ms opening preview, then masked playback`);
     return before.scoreFns;
   } catch (error) {
     console.error(mode, errors, await page.locator('#statusBar').textContent());

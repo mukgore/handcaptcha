@@ -222,7 +222,7 @@ const LiveMotion = (() => {
 
   let renderSurface;
 
-  function paint(canvas, clip, time, mirror, mode) {
+  function paint(canvas, clip, time, mirror, mode, masked = true) {
     const index = clamp(Math.floor(time * FPS + 1e-6), 0, clip.frames.length - 1);
     const points = clip.frames[index];
     if (canvas.width !== WIDTH || canvas.height !== HEIGHT) {
@@ -239,12 +239,14 @@ const LiveMotion = (() => {
     ctx.fillStyle = background;
     ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
-    const path = new Path2D();
-    path.rect(0, 0, WIDTH, HEIGHT);
-    path.moveTo(MASK.x + MASK.r, MASK.y);
-    path.arc(MASK.x, MASK.y, MASK.r, 0, 2 * Math.PI);
-    ctx.save();
-    ctx.clip(path, 'evenodd');
+    if (masked) {
+      const path = new Path2D();
+      path.rect(0, 0, WIDTH, HEIGHT);
+      path.moveTo(MASK.x + MASK.r, MASK.y);
+      path.arc(MASK.x, MASK.y, MASK.r, 0, 2 * Math.PI);
+      ctx.save();
+      ctx.clip(path, 'evenodd');
+    }
     const [wrist, , , , , indexMcp, , , , middleMcp, , , , ringMcp, , , , pinkyMcp] = points;
     const palm = ctx.createLinearGradient(wrist.x - 48, 0, wrist.x + 65, 0);
     palm.addColorStop(0, depth ? '#bf8066' : '#dda489');
@@ -268,11 +270,13 @@ const LiveMotion = (() => {
     } else {
       paintFlatFingers(ctx, points);
     }
-    ctx.restore();
-    ctx.fillStyle = '#070b10';
-    ctx.beginPath();
-    ctx.arc(MASK.x, MASK.y, MASK.r, 0, 2 * Math.PI);
-    ctx.fill();
+    if (masked) {
+      ctx.restore();
+      ctx.fillStyle = '#070b10';
+      ctx.beginPath();
+      ctx.arc(MASK.x, MASK.y, MASK.r, 0, 2 * Math.PI);
+      ctx.fill();
+    }
     ctx.restore();
   }
 
