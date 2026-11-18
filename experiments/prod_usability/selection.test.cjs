@@ -30,13 +30,13 @@ test('short loss returns null observations, reacquires same geometry; long loss 
   const s=new Selector(),a=hand();acquire(s,[a]);
   const miss=s.update([],500);assert.equal(miss.ready,false);assert.equal(miss.hand,null);
   assert.equal(s.update([a],600).ready,true);
-  assert.equal(s.update([a],1100).state,'lost');
+  assert.equal(s.update([a],2200).state,'lost');
 });
 test('entry/exit hysteresis tolerates size boundary and rejects sustained small hand',()=>{
   const s=new Selector();acquire(s,[hand(.2,.2,.2,.2)]);
   assert.equal(s.update([hand(.2,.2,.18,.18)],500).ready,true);
   assert.equal(s.update([hand(.2,.2,.14,.14)],600).ready,false);
-  assert.equal(s.update([hand(.2,.2,.14,.14)],1000).state,'lost');
+  assert.equal(s.update([hand(.2,.2,.14,.14)],2100).state,'lost');
 });
 test('production scoring functions and constants are byte-identical in generated copy',()=>{
   const fs=require('node:fs'),path=require('node:path');

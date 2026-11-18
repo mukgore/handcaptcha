@@ -394,6 +394,7 @@ function stopGhostLoop(){
 // to either hand: clips of the opposite hand get mirrored (video display AND
 // landmark data, see getBaseFromLandmarkData) rather than being excluded.
 async function genSequence(){
+    const sequenceEpoch=attemptEpoch;
     const handLabel = selectedHand === 'left' ? 'Left' : 'Right';
     const candidates = poolManifest && poolManifest.clips || [];
     if(candidates.length < 2){
@@ -404,7 +405,7 @@ async function genSequence(){
     // manifest에 있어도 landmarks 파일이 서버에 없는(404) 클립이 있을 수 있다.
     // 고정된 2개를 뽑아 실패 시 그대로 죽는 대신, 셔플된 목록을 순회하며
     // 실제로 로드에 성공한 클립 2개를 채울 때까지 시도한다.
-    keyframes = [];
+    let nextKeyframes = [];
     let usedClips = 0;
     for(const clip of shuffled){
         if(usedClips >= 2) break;
@@ -412,14 +413,17 @@ async function genSequence(){
         let d;
         try{ d = await loadClipLandmarks(clip); }
         catch(e){ console.error(`clip ${clip.clip_id}: landmarks load failed, skipping`, e); continue; }
+        if(sequenceEpoch!==attemptEpoch || runInvalidated)return;
         const {frames: baseLm, origIdx} = getBaseFromLandmarkData(d, mirror);
         if(!baseLm || baseLm.length === 0) continue;
         const info = getInfoFromLandmarkData(d);
         const kfIdxs = findKeyframes(baseLm);
-        for(const fi of kfIdxs) keyframes.push({clip, mirror, frameIdx:fi, time:origIdx[fi]/info.fps, baseLm:baseLm[fi], allBaseLm:baseLm, fps:info.fps, width:info.width, height:info.height});
+        for(const fi of kfIdxs) nextKeyframes.push({clip, mirror, frameIdx:fi, time:origIdx[fi]/info.fps, baseLm:baseLm[fi], allBaseLm:baseLm, fps:info.fps, width:info.width, height:info.height});
         usedClips++;
     }
     if(usedClips < 2) console.error(`Only ${usedClips} usable clips loaded (need 2)`);
+    if(sequenceEpoch!==attemptEpoch || runInvalidated)return;
+    keyframes=nextKeyframes;
     const prog = document.getElementById('kfProgress');
     prog.innerHTML = keyframes.map((_,i)=>{
         const arrow = i<keyframes.length-1 ? '<span class="kf-arrow">→</span>' : '';
@@ -579,6 +583,7 @@ function onFirstKeyframeMatched(){
 }
 
 function beginNextTransition(){
+    const transitionEpoch=attemptEpoch;
     phase = 'recording';
     videoPlaying = false;
     recStart = performance.now();
@@ -614,7 +619,7 @@ function beginNextTransition(){
         // "영상 재생 중..."에서 세션이 영구히 멈추는 것을 막는다.
         const playDeadline = performance.now() + (stopTime - fromKf.time)*1000 + 3000;
         const checkLoop = () => {
-            if(runInvalidated || runFinished) return;
+            if(runInvalidated || runFinished || transitionEpoch!==attemptEpoch) return;
             if(rv.currentTime >= stopTime - 0.05 || rv.error || performance.now() > playDeadline){
                 // 영상을 멈추고 그 프레임을 그대로 목표 자세로 보여준다 (캔버스
                 // 스냅샷 없음). 사용자는 재생 중에도 실시간으로 따라하므로
@@ -647,7 +652,7 @@ function onTransitionMatched(){
         phase = 'done';
         updateMatchIndicator('matched', '완료');
         setS('complete', '✅ 모든 동작이 완료되었습니다!');
-        setTimeout(() => { if(!runInvalidated) showResult(); }, 500);
+        const completionEpoch=attemptEpoch; setTimeout(() => { if(!runInvalidated && completionEpoch===attemptEpoch) showResult(); }, 500);
     } else {
         beginNextTransition();
     }
@@ -670,7 +675,7 @@ function handleHandednessSample(rawLabel, rawScore){
         if(allSame && avgScore > HANDEDNESS_MIN_SCORE){
             selectedHand = handednessBuffer[0].side;
             handednessBuffer = [];
-            genSequence().then(() => { if(!runInvalidated) startRealChallenge(); else clearAttempt(); }).catch(showAssetError);
+            const loadEpoch=attemptEpoch; genSequence().then(() => { if(loadEpoch===attemptEpoch && !runInvalidated) startRealChallenge(); }).catch(error => { if(loadEpoch===attemptEpoch)showAssetError(error); });
         }
         // else: buffer keeps rolling via shift() above — no numeric/retry feedback shown (§7.4)
     }
@@ -892,7 +897,7 @@ function showResult(){
     if(camStream) camStream.getTracks().forEach(t => t.stop());
 
     const result = {
-        experimentInfo: {participantId: pid, selectedHand, timestamp: Date.now(), version: 'prod_usability_v1'},
+        experimentInfo: {participantId: pid, selectedHand, timestamp: Date.now(), version: 'prod_usability_v2'},
         keyframes: keyframes.map(kf => ({clip: kf.clip.clip_id, frameIdx: kf.frameIdx})),
         segments: segments.map(seg => ({
             fromKf: seg.fromKf, toKf: seg.toKf,

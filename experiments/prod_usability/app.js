@@ -1,8 +1,9 @@
 'use strict';
 let runInvalidated=false,runFinished=false,saveableResult=null;
+let attemptEpoch=0,restartNoticeUntil=0;
 const selectionEvents=[];
 const selector=new UsabilitySelection.Selector();
-const nativeResults=onRes,nativeStart=startRealChallenge,nativeResult=showResult;
+const nativeResults=onRes,nativeStart=startRealChallenge,nativeResult=showResult,nativeKeyframe=showKeyframeImage;
 const cameraArea=document.querySelector('.camera-area');
 const panel=cameraArea.closest('.trial-panel');
 panel.querySelector('.panel-title').textContent='목표 영상 + 내 카메라';
@@ -30,10 +31,26 @@ function clearAttempt(){
 }
 function invalidateAttempt(reason){
   if(runInvalidated||runFinished)return;
+  if(reason==='tracking_timeout'||reason==='ambiguous_crossing'){restartForHand(reason);return;}
   recordSelection(reason);runInvalidated=true;clearAttempt();phase='invalidated';
   if(animId)cancelAnimationFrame(animId);if(camStream)camStream.getTracks().forEach(t=>t.stop());
   hint.textContent='선택한 손을 잃었거나 구분하기 어렵습니다. 현재 시도를 폐기했습니다. 처음부터 다시 시작해 주세요.';
   setS('waiting','선택 해제 · 이전 관문과 기록 초기화 완료');updateMatchIndicator('waiting','처음부터 다시 시작해 주세요');
+}
+function restartForHand(reason){
+  recordSelection(reason);attemptEpoch++;
+  clearAttempt();selector.reset();displayedHand=null;previousReason=null;lastCallback=null;
+  saveableResult=null;saveButton.disabled=true;sessionStart=performance.now();phase='detecting_hand';
+  targetFrame.width=0;targetPending=false;rv.oncanplay=null;rv.removeAttribute('src');rv.load();
+  rv.style.display='none';document.getElementById('kfProgress').innerHTML='';
+  document.getElementById('kfLabel').textContent='손 선택 대기';document.getElementById('kfInfo').textContent='';
+  document.getElementById('frameCounter').textContent='0 프레임';
+  restartNoticeUntil=performance.now()+4000;
+  const notice=reason==='ambiguous_crossing'?'선택한 손을 구분하기 어려워 재시작합니다.':'손이 1.5초 이상 이탈해 재시작합니다.';
+  hint.textContent=notice+' 손 전체를 화면 중앙에 보여 주세요.';
+  setS('waiting',notice+' 손을 보여 주세요.');updateMatchIndicator('waiting','손을 보여 주세요');
+  // Keep the original camera/model loop running; the next packet begins fresh acquisition.
+  paintComposite();
 }
 function showAssetError(error){
   console.error(error);document.getElementById('loadingOverlay').classList.add('hidden');
@@ -51,11 +68,25 @@ function drawContained(source,alpha,mirror){
 }
 let previousReason=null,lastCallback=null;
 const cameraBase=document.createElement('canvas');
+const targetFrame=document.createElement('canvas');
+let targetPending=false,targetExpectedTime=0,targetFrameMirror=false;
+function rememberTarget(){
+  if(rv.readyState<2||rv.seeking||rv.style.display==='none')return;
+  if(targetPending&&Math.abs(rv.currentTime-targetExpectedTime)>.08)return;
+  targetPending=false;
+  if(targetFrame.width!==rv.videoWidth||targetFrame.height!==rv.videoHeight){targetFrame.width=rv.videoWidth;targetFrame.height=rv.videoHeight;}
+  targetFrame.getContext('2d').drawImage(rv,0,0);targetFrameMirror=rv.style.transform==='scaleX(-1)';
+}
+showKeyframeImage=function(index){
+  rememberTarget();targetPending=true;targetExpectedTime=keyframes[index].time;
+  nativeKeyframe(index);
+};
 let displayedHand=null;
 function paintComposite(){
   if(!cameraBase.width||!cameraBase.height)return;
   ctx.clearRect(0,0,cc.width,cc.height);ctx.drawImage(cameraBase,0,0);
-  if(rv.style.display!=='none'&&rv.readyState>=2)drawContained(rv,Number(opacity.value)/100,Boolean(keyframes[kfIdx]?.mirror));
+  rememberTarget();
+  if(targetFrame.width)drawContained(targetFrame,Number(opacity.value)/100,targetFrameMirror);
   if(displayedHand){
     const b=displayedHand.box;const track=camStream?.getVideoTracks()[0],settings=track?.getSettings()||{};
     const front=settings.facingMode==='user'||track?.label.toLowerCase().includes('front');
@@ -83,7 +114,7 @@ onRes=function(result){
   displayedHand=hand;
   if(cameraBase.width!==cc.width||cameraBase.height!==cc.height){cameraBase.width=cc.width;cameraBase.height=cc.height;}
   cameraBase.getContext('2d').drawImage(cc,0,0);
-  hint.textContent=hand?'초록 테두리 손을 선택했습니다. 목표 동작을 따라 하세요.':chosen.reason==='similar_sizes'?'손 하나를 다른 손보다 더 가까이 보여 주세요.':chosen.reason==='missing_or_small'?'선택한 손을 다시 크게 보여 주세요. 누락은 정상 관측으로 사용하지 않습니다.':chosen.state==='stabilizing'?'큰 손을 잠시 안정적으로 유지해 주세요.':'손 전체를 조금 더 가까이 보여 주세요.';
+  if(hand||now>=restartNoticeUntil)hint.textContent=hand?'초록 테두리 손을 선택했습니다. 목표 동작을 따라 하세요.':chosen.reason==='similar_sizes'?'손 하나를 다른 손보다 더 가까이 보여 주세요.':chosen.reason==='missing_or_small'?'선택한 손을 다시 크게 보여 주세요. 1.5초 이상 이탈하면 자동 재시작합니다.':chosen.state==='stabilizing'?'큰 손을 잠시 안정적으로 유지해 주세요.':'손 전체를 조금 더 가까이 보여 주세요.';
   // Render only; inference always receives cv, never this composite.
   paintComposite();
 };

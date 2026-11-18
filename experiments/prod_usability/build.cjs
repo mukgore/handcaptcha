@@ -17,10 +17,20 @@ once('maxNumHands:1','maxNumHands:4');
 once('hands.onResults(onRes);','hands.onResults(result => onRes(result));');
 once('await loadPoolManifest();', 'await loadPoolManifest();\n    if(!poolManifest || !Array.isArray(poolManifest.clips) || poolManifest.clips.length<2) throw Error("pool_manifest.json: at least two clips required");');
 once('const SAVE_LOCAL_JSON = false;', 'const SAVE_LOCAL_JSON = false; // Explicit result-save button below.');
-once("version: 'prod_v2_pool'", "version: 'prod_usability_v1'");
-once('genSequence().then(startRealChallenge);', 'genSequence().then(() => { if(!runInvalidated) startRealChallenge(); else clearAttempt(); }).catch(showAssetError);');
-once('const checkLoop = () => {', 'const checkLoop = () => {\n            if(runInvalidated || runFinished) return;');
-once('setTimeout(showResult, 500);', 'setTimeout(() => { if(!runInvalidated) showResult(); }, 500);');
+once("version: 'prod_v2_pool'", "version: 'prod_usability_v2'");
+// Sequence loading must never publish a previous attempt after an automatic reset.
+const sequenceStart=html.indexOf('async function genSequence(){');
+const sequenceEnd=html.indexOf('// ===== FRAMING GUIDE',sequenceStart);
+const sequence=html.slice(sequenceStart,sequenceEnd);
+const isolated=sequence.replace('async function genSequence(){','async function genSequence(){\n    const sequenceEpoch=attemptEpoch;')
+  .replace('keyframes = [];','let nextKeyframes = [];').replaceAll('keyframes.push','nextKeyframes.push')
+  .replace('const {frames: baseLm, origIdx} = getBaseFromLandmarkData(d, mirror);','if(sequenceEpoch!==attemptEpoch || runInvalidated)return;\n        const {frames: baseLm, origIdx} = getBaseFromLandmarkData(d, mirror);')
+  .replace("    const prog = document.getElementById('kfProgress');", "    if(sequenceEpoch!==attemptEpoch || runInvalidated)return;\n    keyframes=nextKeyframes;\n    const prog = document.getElementById('kfProgress');");
+html=html.slice(0,sequenceStart)+isolated+html.slice(sequenceEnd);
+once('genSequence().then(startRealChallenge);', 'const loadEpoch=attemptEpoch; genSequence().then(() => { if(loadEpoch===attemptEpoch && !runInvalidated) startRealChallenge(); }).catch(error => { if(loadEpoch===attemptEpoch)showAssetError(error); });');
+once('function beginNextTransition(){','function beginNextTransition(){\n    const transitionEpoch=attemptEpoch;');
+once('const checkLoop = () => {', 'const checkLoop = () => {\n            if(runInvalidated || runFinished || transitionEpoch!==attemptEpoch) return;');
+once('setTimeout(showResult, 500);', 'const completionEpoch=attemptEpoch; setTimeout(() => { if(!runInvalidated && completionEpoch===attemptEpoch) showResult(); }, 500);');
 once('(async function loop(){ if(cv.readyState>=2) await hands.send({image:cv}); animId = requestAnimationFrame(loop); })();', '(async function loop(){ if(runInvalidated || runFinished)return; try { if(cv.readyState>=2) await hands.send({image:cv}); } catch(e) { invalidateAttempt("inference_error"); return; } if(!runInvalidated && !runFinished) animId = requestAnimationFrame(loop); })();');
 once("}catch(e){ document.getElementById('cameraPlaceholder').textContent = '카메라 접근이 거부되었습니다.'; }", "}catch(e){ document.getElementById('cameraPlaceholder').textContent = '카메라를 열 수 없습니다 ('+e.name+'). 주소창 카메라 권한·다른 앱 사용 여부를 확인한 뒤 다시 시작하세요.'; }");
 once('drawFramingGuideOverlay(performance.now());', '/* Display uses only the existing masked video; no extra pose overlay. */');

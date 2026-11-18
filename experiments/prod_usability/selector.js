@@ -2,7 +2,7 @@
 (function(root){
   'use strict';
   const DEFAULTS = Object.freeze({minArea:0.035, exitArea:0.024, stableMs:350,
-    missingMs:450, tieRatio:1.12, maxTravel:0.65, maxScaleRatio:2.4, ambiguityMargin:0.12});
+    missingMs:1500, tieRatio:1.12, maxTravel:0.65, maxScaleRatio:2.4, ambiguityMargin:0.12});
   function candidate(points,index){
     if(!Array.isArray(points)||points.length!==21||points.some(p=>!p||
       ![p.x,p.y,p.z].every(Number.isFinite)||p.x<0||p.x>1||p.y<0||p.y>1))return null;

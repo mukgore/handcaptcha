@@ -33,6 +33,21 @@ let browser;
   const download=page.waitForEvent('download');await page.locator('#saveResult').click();const d=await download;
   assert.ok(JSON.parse(fs.readFileSync(await d.path(),'utf8')).selection);console.log('PASS result JSON download');
   await page.evaluate(()=>clearInterval(window.testTimer));
+  // Delay the next real MP4: cached masked frame must remain byte-identical until ready.
+  let releaseVideo;const delayedVideo=new Promise(resolve=>{releaseVideo=resolve;});
+  await page.route('**/*usability-delay=1',async route=>{await delayedVideo;await route.continue();});
+  const held=await page.evaluate(()=>{
+    const before=targetFrame.toDataURL();const last=keyframes[kfIdx];
+    const video=last.clip.video_file.startsWith('custom01')?'custom02.mp4':'custom01.mp4';
+    keyframes[kfIdx]={...last,time:.5,clip:{...last.clip,video_file:video+'?usability-delay=1'}};
+    showKeyframeImage(kfIdx);paintComposite();return before;
+  });
+  await page.waitForTimeout(500);
+  assert.equal(await page.evaluate(()=>{paintComposite();return targetFrame.toDataURL();}),held);
+  assert.equal(await page.evaluate(()=>targetPending),true);releaseVideo();
+  await page.waitForFunction(()=>{paintComposite();return !targetPending;},{},{timeout:15000});
+  assert.notEqual(await page.evaluate(()=>targetFrame.toDataURL()),held);
+  console.log('PASS previous masked frame held through delayed next video and replaced when decoded');
   await page.reload();try{await page.waitForFunction(()=>typeof phase!=='undefined'&&phase==='detecting_hand'&&cv.readyState>=2,{},{timeout:60000});}catch(e){console.error(await page.locator('body').innerText());console.error(errors,failed);throw e;}
   await page.evaluate(()=>{cancelAnimationFrame(animId);runFinished=true;});await page.waitForTimeout(400);
   const routing=await page.evaluate(async()=>{
@@ -51,13 +66,33 @@ let browser;
     segments=[{frames:[{lm:[[1,1]]}]}];curSegFrames=[{lm:[[2,2]]}];matchHoldStart=performance.now();
     onRes({image:cv,multiHandLandmarks:[],multiHandedness:[]});
     const missingNull=sessionLog.at(-1).detected===false&&sessionLog.at(-1).lm===null&&matchHoldStart===null;
-    await new Promise(r=>setTimeout(r,650));
-    return {onlyA,sideSamples,selectedGate,selectedRecording,count:selected.length,missingNull,invalidated:runInvalidated,phase,segments:segments.length,buffer:curSegFrames.length,hold:matchHoldStart,side:selectedHand,handedness:handednessBuffer.length};
+    const stream=camStream;await new Promise(r=>setTimeout(r,1800));
+    return {onlyA,sideSamples,selectedGate,selectedRecording,count:selected.length,missingNull,invalidated:runInvalidated,phase,segments:segments.length,buffer:curSegFrames.length,hold:matchHoldStart,side:selectedHand,handedness:handednessBuffer.length,cameraKept:camStream===stream&&stream.getVideoTracks()[0].readyState==='live',notice:hint.textContent,selectorState:selector.state};
   });
-  assert.ok(routing.onlyA&&routing.sideSamples&&routing.count>0&&routing.missingNull&&routing.invalidated);
+  assert.ok(routing.onlyA&&routing.sideSamples&&routing.count>0&&routing.missingNull&&!routing.invalidated);
+  assert.equal(routing.phase,'detecting_hand');assert.equal(routing.selectorState,'waiting');assert.ok(routing.cameraKept);assert.match(routing.notice,/1.5초 이상 이탈해 재시작/);
   assert.ok(routing.selectedGate&&routing.selectedRecording);
   assert.equal(routing.segments,0);assert.equal(routing.buffer,0);assert.equal(routing.hold,null);assert.equal(routing.side,null);assert.equal(routing.handedness,0);
-  console.log('PASS selected-only routing, null missing frame, atomic invalidation',JSON.stringify(routing));
+  console.log('PASS selected-only routing, null missing frame, automatic reset preserving camera',JSON.stringify(routing));
+  // A stale sequence response cannot overwrite the new attempt.
+  const stale=await page.evaluate(async()=>{
+    const oldLoader=loadClipLandmarks;let release;const pending=new Promise(r=>release=r);
+    const sample=Object.values(landmarksCache)[0];loadClipLandmarks=async()=>{await pending;return sample;};
+    selectedHand='right';const loading=genSequence();restartForHand('tracking_timeout');release();await loading;
+    loadClipLandmarks=oldLoader;return {phase,count:keyframes.length};
+  });
+  assert.equal(stale.phase,'detecting_hand');assert.equal(stale.count,0);console.log('PASS stale async sequence cannot restore discarded attempt');
+  await page.evaluate(()=>{
+    window.returnPoints=Array.from({length:21},(_,i)=>[.25+(i%5)*.06,.2+Math.floor(i/5)*.1]);
+    window.returnTimer=setInterval(()=>{
+      const desired=targetLm||window.returnPoints;
+      window.returnPoints=window.returnPoints.map((p,i)=>[p[0]+(desired[i][0]-p[0])*.25,p[1]+(desired[i][1]-p[1])*.25]);
+      onRes({image:cv,multiHandLandmarks:[window.returnPoints.map(p=>({x:p[0],y:p[1],z:0}))],multiHandedness:[{label:'Left',score:.99}]});
+    },70);
+  });
+  await page.waitForFunction(()=>keyframes.length>0&&(phase==='matching'||phase==='recording'),{},{timeout:15000});
+  await page.evaluate(()=>{clearInterval(window.returnTimer);runFinished=true;});
+  console.log('PASS returned hand starts fresh challenge without page reload');
   await page.locator('#restartAttempt').click();await page.waitForFunction(()=>typeof phase!=='undefined'&&phase==='detecting_hand'&&cv.readyState>=2,{},{timeout:30000});
   console.log('PASS restart returns to fresh camera and hand acquisition');
   await page.setViewportSize({width:390,height:844});assert.ok(await page.locator('.camera-area').isVisible());
