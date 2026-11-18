@@ -3,7 +3,7 @@
 // Both renderers use the same fixed-length, articulated 3D hand.
 const LiveMotion = (() => {
   const WIDTH = 512, HEIGHT = 420, FPS = 30;
-  const MASK = { x: 258, y: 233, r: 95 };
+  const MASK = { x: 225, y: 265, r: 95 };
   const WRIST_Y = -114;
   // Buryanov & Kotiuk (2010), Table I. Lengths are rounded at roughly
   // 1.21 model units/mm, including the measured soft tissue at the fingertips.
@@ -28,7 +28,7 @@ const LiveMotion = (() => {
 
   function project(point, motion) {
     const [x, y, z] = point;
-    const yaw = -.14 + motion.yaw, pitch = .25 + motion.pitch;
+    const yaw = -.4 + motion.yaw, pitch = -.14 + motion.pitch;
     const xx = Math.cos(yaw) * x + Math.sin(yaw) * z;
     const zz = Math.cos(yaw) * z - Math.sin(yaw) * x;
     // Turn around the wrist, keeping its projected location stable.
@@ -57,7 +57,9 @@ const LiveMotion = (() => {
   }
 
   const distance = p => Math.hypot(p.x - MASK.x, p.y - MASK.y);
-  const clearTip = p => distance(p) >= MASK.r * 1.1 + 9;
+  // The landmark is now the skin endpoint. Reserve a 9 px strip behind
+  // it beyond the circle so the cue includes part of the fingertip.
+  const clearTip = p => distance(p) >= MASK.r + 9;
 
   function maskPasses(points) {
     const middle = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });

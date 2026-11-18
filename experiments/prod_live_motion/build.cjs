@@ -45,12 +45,12 @@ replace("                rv.pause();\n                videoPlaying = false;", ` 
                 else rv.pause();
                 videoPlaying = false;`);
 replace("version: 'prod_usability_v5'",
-  "version: 'prod_live_motion_v6', motion_source: motionMode, motion_sources: [...presentedModes]");
+  "version: 'prod_live_motion_v7', motion_source: motionMode, motion_sources: [...presentedModes]");
 replace('    await loadPoolManifest();\n    if(!poolManifest || !Array.isArray(poolManifest.clips) || poolManifest.clips.length<2) throw Error("pool_manifest.json: at least two clips required");', `    if(motionMode === 'recorded'){
         await loadPoolManifest();
         if(!poolManifest || !Array.isArray(poolManifest.clips) || poolManifest.clips.length<2) throw Error("pool_manifest.json: at least two clips required");
     }`);
-replace('<script>bootstrap().catch(showAssetError);</script>', `<script src="experiments/prod_live_motion/motion.js?v=6"></script>
+replace('<script>bootstrap().catch(showAssetError);</script>', `<script src="experiments/prod_live_motion/motion.js?v=7"></script>
 <script src="experiments/prod_live_motion/live.js?v=5"></script>
 <script>bootstrap().catch(showAssetError);</script>`);
 fs.writeFileSync(path.join(__dirname, 'index.html'), html);

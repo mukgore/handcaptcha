@@ -912,7 +912,7 @@ function showResult(){
     if(camStream) camStream.getTracks().forEach(t => t.stop());
 
     const result = {
-        experimentInfo: {participantId: pid, selectedHand, timestamp: Date.now(), version: 'prod_live_motion_v6', motion_source: motionMode, motion_sources: [...presentedModes]},
+        experimentInfo: {participantId: pid, selectedHand, timestamp: Date.now(), version: 'prod_live_motion_v7', motion_source: motionMode, motion_sources: [...presentedModes]},
         keyframes: keyframes.map(kf => ({clip: kf.clip.clip_id, frameIdx: kf.frameIdx})),
         segments: segments.map(seg => ({
             fromKf: seg.fromKf, toKf: seg.toKf,
@@ -1004,7 +1004,7 @@ async function bootstrap(){
 </script>
 <script src="experiments/prod_usability_v5/selector.js"></script>
 <script src="experiments/prod_usability_v5/app.js"></script>
-<script src="experiments/prod_live_motion/motion.js?v=6"></script>
+<script src="experiments/prod_live_motion/motion.js?v=7"></script>
 <script src="experiments/prod_live_motion/live.js?v=5"></script>
 <script>bootstrap().catch(showAssetError);</script>
 </body>
