@@ -1,0 +1,18 @@
+.live-motion #kfInfo { display: none; }
+.motion-control { display: inline-flex; align-items: center; gap: 6px; }
+.motion-control select {
+  color: #0f172a;
+  background: #fff;
+  border: 1px solid #94a3b8;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font: inherit;
+}
+.motion-caption {
+  margin: 0;
+  padding: 0 10px 8px;
+  text-align: center;
+  font-size: 12px;
+  color: #475569;
+  background: #fff;
+}
