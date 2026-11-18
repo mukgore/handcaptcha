@@ -21,10 +21,29 @@ test('a larger distractor never replaces the selected hand',()=>{
   const s=new Selector(),a=hand();acquire(s,[a]);
   const r=s.update([hand(.6,.1,.35,.6),a],500);assert.equal(r.hand.points,a);assert.equal(r.hand.index,1);
 });
-test('crossing ambiguity invalidates and stays lost until reset',()=>{
+test('a brief crossing skips ambiguous frames and resumes the same hand',()=>{
   const s=new Selector(),a=hand();acquire(s,[a]);
-  assert.equal(s.update([a,hand(.205)],500).state,'lost');
-  assert.equal(s.update([a],600).ready,false);s.reset();assert.equal(acquire(s,[a],700).ready,true);
+  const ambiguous=s.update([a,hand(.205)],500);
+  assert.equal(ambiguous.reason,'ambiguous_crossing');
+  assert.equal(ambiguous.hand,null);
+  assert.equal(s.update([a],600).hand.points,a);
+});
+test('persistent crossing times out without handing over the attempt',()=>{
+  const s=new Selector(),a=hand(),b=hand(.205);acquire(s,[a]);
+  assert.equal(s.update([a,b],500).hand,null);
+  assert.equal(s.update([b,a],1800).hand,null);
+  assert.equal(s.update([b,a],2000).state,'lost');
+  assert.equal(s.update([a],2100).ready,false);
+});
+test('curling fingers can shrink the bounding box without losing a steady palm',()=>{
+  const palmPoints=new Set([0,5,9,13,17]);
+  const open=hand(.25,.25,.25,.45).map((p,i)=>palmPoints.has(i)?{...p,x:.29+i%5*.02,y:.50+i%4*.02}:p);
+  const closed=open.map((p,i)=>palmPoints.has(i)?p:{...p,x:.28+i%5*.024,y:.46+i%4*.048});
+  assert.ok(candidate(open,0).area/candidate(closed,0).area>2.4);
+  assert.ok(candidate(closed,0).area<.024);
+  const s=new Selector();assert.ok(acquire(s,[open]).ready);
+  assert.equal(s.update([closed],500).hand.points,closed);
+  assert.equal(s.update([closed],2050).state,'lost'); // a long inference gap still resets
 });
 test('short loss returns null observations, reacquires same geometry; long loss invalidates',()=>{
   const s=new Selector(),a=hand();acquire(s,[a]);

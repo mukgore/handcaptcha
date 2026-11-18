@@ -122,7 +122,7 @@ let browser;
     return {onlyA,sideSamples,selectedGate,selectedRecording,count:selected.length,missingNull,invalidated:runInvalidated,phase,segments:segments.length,buffer:curSegFrames.length,hold:matchHoldStart,side:selectedHand,handedness:handednessBuffer.length,cameraKept:camStream===stream&&stream.getVideoTracks()[0].readyState==='live',notice:hint.textContent,selectorState:selector.state};
   });
   assert.ok(routing.onlyA&&routing.sideSamples&&routing.count>0&&routing.missingNull&&!routing.invalidated);
-  assert.equal(routing.phase,'detecting_hand');assert.equal(routing.selectorState,'waiting');assert.ok(routing.cameraKept);assert.match(routing.notice,/1.5초 이상 이탈해 재시작/);
+  assert.equal(routing.phase,'detecting_hand');assert.equal(routing.selectorState,'waiting');assert.ok(routing.cameraKept);assert.match(routing.notice,/1.5초 이상 끊겨 재시작/);
   assert.ok(routing.selectedGate&&routing.selectedRecording);
   assert.equal(routing.segments,0);assert.equal(routing.buffer,0);assert.equal(routing.hold,null);assert.equal(routing.side,null);assert.equal(routing.handedness,0);
   console.log('PASS selected-only routing, null missing frame, automatic reset preserving camera',JSON.stringify(routing));

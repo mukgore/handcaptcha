@@ -3,13 +3,35 @@
   'use strict';
   const DEFAULTS = Object.freeze({minArea:0.035, exitArea:0.024, stableMs:350,
     missingMs:1500, tieRatio:1.12, maxTravel:0.65, maxScaleRatio:2.4, ambiguityMargin:0.12});
+  const PALM_POINTS=[0,5,9,13,17];
   function candidate(points,index){
     if(!Array.isArray(points)||points.length!==21||points.some(p=>!p||
       ![p.x,p.y,p.z].every(Number.isFinite)||p.x<0||p.x>1||p.y<0||p.y>1))return null;
     const xs=points.map(p=>p.x),ys=points.map(p=>p.y);
     const box={x:Math.min(...xs),y:Math.min(...ys),width:Math.max(...xs)-Math.min(...xs),height:Math.max(...ys)-Math.min(...ys)};
     const area=box.width*box.height;
-    return area>1e-6?{points,index,box,area,cx:box.x+box.width/2,cy:box.y+box.height/2}:null;
+    if(area<=1e-6)return null;
+    return {points,index,box,area,cx:box.x+box.width/2,cy:box.y+box.height/2};
+  }
+  function palm(hand){
+    const points=PALM_POINTS.map(i=>hand.points[i]);
+    const cx=points.reduce((sum,p)=>sum+p.x,0)/points.length;
+    const cy=points.reduce((sum,p)=>sum+p.y,0)/points.length;
+    const span=2*Math.sqrt(points.reduce((sum,p)=>sum+(p.x-cx)**2+(p.y-cy)**2,0)/points.length);
+    return {points,cx,cy,span};
+  }
+  function trackingDistance(reference,hand,config){
+    const next=palm(hand);
+    if(reference.span<1e-4||next.span<1e-4)return Infinity;
+    const ratio=Math.max(reference.span,next.span)/Math.min(reference.span,next.span);
+    const travel=Math.hypot(reference.cx-next.cx,reference.cy-next.cy)/reference.span;
+    if(travel>config.maxTravel||ratio**2>config.maxScaleRatio)return Infinity;
+    // A fist can shrink the finger box while the wrist and palm stay in place.
+    if(hand.area<config.exitArea&&(hand.area<config.exitArea/2||ratio>1.2||travel>0.25))return Infinity;
+    const shape=reference.points.reduce((sum,p,i)=>sum+Math.hypot(
+      (p.x-reference.cx)/reference.span-(next.points[i].x-next.cx)/next.span,
+      (p.y-reference.cy)/reference.span-(next.points[i].y-next.cy)/next.span),0);
+    return travel+shape/reference.points.length;
   }
   function distance(a,b,c){
     const ratio=Math.max(a.area,b.area)/Math.min(a.area,b.area);
@@ -31,9 +53,11 @@
       if(this.state==='lost')return out(null,'restart_required');
       if(this.state==='selected'){
         if(now-this.lastSeen>c.missingMs){this.state='lost';return out(null,'tracking_timeout');}
-        const ranked=all.map(hand=>({hand,d:distance(this.previous,hand,c)})).filter(x=>Number.isFinite(x.d)).sort((a,b)=>a.d-b.d);
-        if(ranked.length>1&&ranked[1].d-ranked[0].d<=c.ambiguityMargin){this.state='lost';return out(null,'ambiguous_crossing');}
-        if(!ranked.length||ranked[0].hand.area<c.exitArea)return out(null,'missing_or_small');
+        const reference=palm(this.previous);
+        const ranked=all.map(hand=>({hand,d:trackingDistance(reference,hand,c)})).filter(x=>Number.isFinite(x.d)).sort((a,b)=>a.d-b.d);
+        // Treat a transient tie like a missing frame. Keep the previous palm as the reference.
+        if(ranked.length>1&&ranked[1].d-ranked[0].d<=c.ambiguityMargin)return out(null,'ambiguous_crossing');
+        if(!ranked.length)return out(null,'missing_or_small');
         this.previous=ranked[0].hand;this.lastSeen=now;return out(this.previous,'tracking');
       }
       const valid=all.filter(h=>h.area>=c.minArea).sort((a,b)=>b.area-a.area);

@@ -61,7 +61,9 @@ function showGuidance(){
     return;
   }
   if(phase!=='matching'&&phase!=='recording')return;
-  if(frameSelection?.reason==='missing_or_small'){
+  if(frameSelection?.reason==='ambiguous_crossing'){
+    showHint('손이 겹쳐 구분하기 어려워요. 선택한 손만 비춰 주세요.');
+  }else if(frameSelection?.reason==='missing_or_small'){
     showHint('선택한 손을 다시 비춰 주세요. 1.5초 이상 벗어나면 처음부터 시작합니다.');
   }else if(targetPending||(videoPlaying&&rv.readyState<HTMLMediaElement.HAVE_FUTURE_DATA)){
     showHint('따라 할 영상을 불러오는 중이에요. 손을 그대로 유지해 주세요.','loading');
@@ -85,7 +87,7 @@ function clearAttempt(){
 }
 function invalidateAttempt(reason){
   if(runInvalidated||runFinished)return;
-  if(reason==='tracking_timeout'||reason==='ambiguous_crossing'){restartForHand(reason);return;}
+  if(reason==='tracking_timeout'){restartForHand(reason);return;}
   recordSelection(reason);runInvalidated=true;clearAttempt();phase='invalidated';
   if(animId)cancelAnimationFrame(animId);if(camStream)camStream.getTracks().forEach(t=>t.stop());
   showHint('손 추적을 계속할 수 없습니다. 처음부터 다시 시작해 주세요.');
@@ -100,7 +102,7 @@ function restartForHand(reason){
   document.getElementById('kfLabel').textContent='손 선택 대기';document.getElementById('kfInfo').textContent='';
   document.getElementById('frameCounter').textContent='0 프레임';
   restartNoticeUntil=performance.now()+4000;
-  const notice=reason==='ambiguous_crossing'?'선택한 손을 구분하기 어려워 재시작합니다.':'손이 1.5초 이상 이탈해 재시작합니다.';
+  const notice='손 추적이 1.5초 이상 끊겨 재시작합니다.';
   restartNotice=notice+' 손 전체를 화면 중앙에 보여 주세요.';
   frameSelection=null;showGuidance();
   // Keep the original camera/model loop running; the next packet begins fresh acquisition.
