@@ -3,7 +3,8 @@
 const motionModes = { '3d': '실시간 3D', '2d': '실시간 2D', recorded: '기존 촬영 영상' };
 const modeUrl = new URL(location.href);
 const requestedMode = modeUrl.searchParams.get('motion');
-const motionMode = Object.hasOwn(motionModes, requestedMode) ? requestedMode : '3d';
+let motionMode = Object.hasOwn(motionModes, requestedMode) ? requestedMode : '3d';
+const presentedModes = new Set();
 document.getElementById('screenTrial').classList.add('live-motion');
 const modeControl = document.createElement('label');
 modeControl.className = 'motion-control';
@@ -12,8 +13,15 @@ const modeSelect = document.createElement('select');
 for (const [value, text] of Object.entries(motionModes)) modeSelect.add(new Option(text, value));
 modeSelect.value = motionMode;
 modeSelect.addEventListener('change', () => {
-  modeUrl.searchParams.set('motion', modeSelect.value);
-  location.assign(modeUrl);
+  const nextMode = modeSelect.value;
+  modeUrl.searchParams.set('motion', nextMode);
+  if (motionMode === 'recorded' || nextMode === 'recorded') {
+    location.assign(modeUrl);
+    return;
+  }
+  motionMode = nextMode;
+  history.replaceState(null, '', modeUrl);
+  rememberTarget();
 });
 modeControl.append(modeSelect);
 controls.prepend(modeControl);
@@ -28,7 +36,8 @@ function liveTime() {
 }
 
 function setLiveTarget(keyframe, end = keyframe.time) {
-  liveTarget = { keyframe, start: keyframe.time, end, startedAt: performance.now(), epoch: attemptEpoch, drawnAt: -1 };
+  if (!liveTarget || liveTarget.epoch !== attemptEpoch) presentedModes.clear();
+  liveTarget = { keyframe, start: keyframe.time, end, startedAt: performance.now(), epoch: attemptEpoch, drawnAt: -1, drawnMode: null };
   rememberTarget();
 }
 
@@ -41,9 +50,11 @@ rememberTarget = function () {
   if (!liveTarget || liveTarget.epoch !== attemptEpoch) return;
   const { keyframe } = liveTarget;
   const time = Math.floor(liveTime() * keyframe.fps + 1e-6) / keyframe.fps;
-  if (time === liveTarget.drawnAt) return;
-  LiveMotion.paint(targetFrame, keyframe.clip, time, keyframe.mirror);
+  if (time === liveTarget.drawnAt && motionMode === liveTarget.drawnMode) return;
+  LiveMotion.paint(targetFrame, keyframe.clip, time, keyframe.mirror, motionMode);
   liveTarget.drawnAt = time;
+  liveTarget.drawnMode = motionMode;
+  presentedModes.add(motionMode);
   targetPending = false;
   targetPlaceholder.hidden = true;
 };

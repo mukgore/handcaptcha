@@ -18,7 +18,7 @@ replace('<title>손 동작 CAPTCHA</title>', '<title>손동작 CAPTCHA · 실시
 replace('    <base href="../../">', '    <base href="../../">\n    <link rel="stylesheet" href="experiments/prod_live_motion/live.css">');
 replace('    if(landmarksCache[clip.clip_id])', '    if(clip.landmarks) return clip.landmarks;\n    if(landmarksCache[clip.clip_id])');
 replace('    const candidates = poolManifest && poolManifest.clips || [];',
-  "    const candidates = motionMode === 'recorded' ? poolManifest.clips : LiveMotion.createChallenge(motionMode, LN);");
+  "    const candidates = motionMode === 'recorded' ? poolManifest.clips : LiveMotion.createChallenge(LN);");
 replace('    const shuffled = [...candidates].sort(() => Math.random()-0.5);',
   "    const shuffled = motionMode === 'recorded' ? [...candidates].sort(() => Math.random()-0.5) : candidates;");
 replace('const kfIdxs = findKeyframes(baseLm);', 'const kfIdxs = clip.keyframeIndices ?? findKeyframes(baseLm);');
@@ -41,12 +41,13 @@ replace('            if(rv.currentTime >= stopTime - 0.05 || rv.error || perform
 replace("                rv.pause();\n                videoPlaying = false;", `                if(toKf.clip.frames) setLiveTarget(toKf);
                 else rv.pause();
                 videoPlaying = false;`);
-replace("version: 'prod_usability_v4'", "version: 'prod_live_motion_v1',\n        motion_source: motionMode");
+replace("version: 'prod_usability_v4'",
+  "version: 'prod_live_motion_v2', motion_source: motionMode, motion_sources: [...presentedModes]");
 replace('    await loadPoolManifest();\n    if(!poolManifest || !Array.isArray(poolManifest.clips) || poolManifest.clips.length<2) throw Error("pool_manifest.json: at least two clips required");', `    if(motionMode === 'recorded'){
         await loadPoolManifest();
         if(!poolManifest || !Array.isArray(poolManifest.clips) || poolManifest.clips.length<2) throw Error("pool_manifest.json: at least two clips required");
     }`);
-replace('<script>bootstrap().catch(showAssetError);</script>', `<script src="experiments/prod_live_motion/motion.js"></script>
-<script src="experiments/prod_live_motion/live.js"></script>
+replace('<script>bootstrap().catch(showAssetError);</script>', `<script src="experiments/prod_live_motion/motion.js?v=2"></script>
+<script src="experiments/prod_live_motion/live.js?v=2"></script>
 <script>bootstrap().catch(showAssetError);</script>`);
 fs.writeFileSync(path.join(__dirname, 'index.html'), html);

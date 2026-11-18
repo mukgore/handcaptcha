@@ -44,19 +44,36 @@ async function check(browser, mode) {
       assert.ok(requests.some(url => url.endsWith('.mp4')));
       return before.scoreFns;
     }
-    assert.match(before.clip, new RegExp('^live-' + mode));
+    assert.match(before.clip, /^live-/);
     assert.ok(!requests.some(url => /pool_manifest\.json|\.mp4|landmarks\.json/.test(url)));
+    const otherMode = mode === '3d' ? '2d' : '3d';
+    await page.locator('.motion-control select').selectOption(otherMode);
+    const changed = await page.evaluate(() => ({
+      image: targetFrame.toDataURL(), clip: keyframes[0].clip.clip_id, time: liveTime(), index: kfIdx,
+      reports: [...presentedModes],
+    }));
+    assert.deepEqual({ clip: changed.clip, time: changed.time, index: changed.index }, { clip: before.clip, time: 0, index: 0 });
+    assert.notEqual(changed.image, before.image);
+    assert.deepEqual(changed.reports, [mode, otherMode]);
+    await page.locator('.motion-control select').selectOption(mode);
+    assert.equal(await page.evaluate(() => targetFrame.toDataURL()), before.image);
+    if (process.env.CAPTCHA_SCREENSHOTS) {
+      await page.locator('#targetFrame').screenshot({ path: process.env.CAPTCHA_SCREENSHOTS + '-' + mode + '.png' });
+    }
     await page.evaluate(() => beginNextTransition());
     await page.waitForFunction(() => videoPlaying && liveTime() > .35);
     await page.locator('#swapHandViews').click();
     await page.waitForFunction(() => !videoPlaying && liveTime() === keyframes[1].time);
     const after = await page.evaluate(() => ({
       image: targetFrame.toDataURL(), clip: keyframes[kfIdx].clip.clip_id,
-      color: [...targetFrame.getContext('2d').getImageData(258, 180, 1, 1).data],
+      maskPixels: [[258, 122], [258, 298], [170, 210], [346, 210], [258, 115], [258, 305]]
+        .map(([x, y]) => [...targetFrame.getContext('2d').getImageData(x, y, 1, 1).data]),
     }));
     assert.equal(after.clip, before.clip);
     assert.notEqual(after.image, before.image);
-    assert.deepEqual(after.color, [7, 11, 16, 255]);
+    const masked = [7, 11, 16, 255];
+    assert.deepEqual(after.maskPixels.slice(0, 4), Array(4).fill(masked));
+    for (const pixel of after.maskPixels.slice(4)) assert.notDeepEqual(pixel, masked);
     assert.deepEqual(errors, []);
     console.log(`PASS ${mode}: initialized capture, generated masked frames, played and held the next pose`);
     return before.scoreFns;
