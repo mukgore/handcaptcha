@@ -33,24 +33,28 @@ async function check(browser, mode) {
       await genSequence();
       startRealChallenge();
       if (motionMode === 'recorded') return null;
-      const pixel = () => [...targetFrame.getContext('2d').getImageData(258, 228, 1, 1).data];
+      const pixel = () => [...targetFrame.getContext('2d').getImageData(258, 233, 1, 1).data];
       const firstPixel = pixel();
-      const deadline = liveTarget.previewUntil;
-      const during = { active: targetPreviewActive(), firstPixel, deadlineStable: true };
+      const start = liveTarget.previewStartedAt;
+      const during = { active: targetPreviewActive(), firstPixel, initialOpacity: liveTarget.drawnOpacity };
       const initialMode = motionMode;
       modeSelect.value = motionMode === '3d' ? '2d' : '3d';
       modeSelect.dispatchEvent(new Event('change'));
-      during.deadlineStable = liveTarget.previewUntil === deadline;
+      during.startStable = liveTarget.previewStartedAt === start;
       modeSelect.value = initialMode;
       modeSelect.dispatchEvent(new Event('change'));
       await new Promise(resolve => {
         const waitForPaint = () => {
-          if (targetPreviewActive()) requestAnimationFrame(waitForPaint);
-          else resolve();
+          if (!targetPreviewActive()) return resolve();
+          const elapsed = performance.now() - start;
+          const opacity = liveTarget.drawnOpacity;
+          if (elapsed >= 200 && elapsed < 500) during.holdOpacity = opacity;
+          if (!during.fadePixel && opacity > .2 && opacity < .8) during.fadePixel = pixel();
+          requestAnimationFrame(waitForPaint);
         };
         requestAnimationFrame(waitForPaint);
       });
-      return { ...during, elapsed: performance.now() - (deadline - 300), maskedPixel: pixel(), time: liveTime() };
+      return { ...during, elapsed: performance.now() - start, maskedPixel: pixel(), time: liveTime() };
     });
     await page.waitForFunction(() => targetFrame.width > 0 && !targetPending);
     const before = await page.evaluate(() => ({
@@ -64,10 +68,15 @@ async function check(browser, mode) {
       return before.scoreFns;
     }
     const masked = [7, 11, 16, 255];
-    assert.ok(opening.active && opening.deadlineStable);
+    assert.ok(opening.active && opening.startStable);
+    assert.equal(opening.initialOpacity, 0);
+    assert.equal(opening.holdOpacity, 0);
     assert.notDeepEqual(opening.firstPixel, masked);
+    assert.ok(opening.fadePixel);
+    assert.notDeepEqual(opening.fadePixel, masked);
+    assert.notDeepEqual(opening.fadePixel, opening.firstPixel);
     assert.deepEqual(opening.maskedPixel, masked);
-    assert.ok(opening.elapsed >= 300);
+    assert.ok(opening.elapsed >= 1000);
     assert.equal(opening.time, 0);
     assert.match(before.clip, /^live-/);
     assert.ok(!requests.some(url => /pool_manifest\.json|\.mp4|landmarks\.json/.test(url)));
@@ -83,7 +92,7 @@ async function check(browser, mode) {
     await page.locator('.motion-control select').selectOption(mode);
     const restored = await page.evaluate(() => ({
       mode: liveTarget.drawnMode, clip: liveTarget.keyframe.clip.clip_id, time: liveTime(),
-      pixel: [...targetFrame.getContext('2d').getImageData(258, 228, 1, 1).data],
+      pixel: [...targetFrame.getContext('2d').getImageData(258, 233, 1, 1).data],
     }));
     assert.deepEqual(restored, { mode, clip: before.clip, time: 0, pixel: masked });
     if (process.env.CAPTCHA_SCREENSHOTS) {
@@ -95,7 +104,7 @@ async function check(browser, mode) {
     await page.waitForFunction(() => !videoPlaying && liveTime() === keyframes[1].time);
     const after = await page.evaluate(() => ({
       image: targetFrame.toDataURL(), clip: keyframes[kfIdx].clip.clip_id,
-      maskPixels: [[258, 140], [258, 316], [170, 228], [346, 228], [258, 133], [258, 323]]
+      maskPixels: [[258, 140], [258, 326], [165, 233], [351, 233], [258, 134], [258, 332]]
         .map(([x, y]) => [...targetFrame.getContext('2d').getImageData(x, y, 1, 1).data]),
     }));
     assert.equal(after.clip, before.clip);
@@ -106,11 +115,11 @@ async function check(browser, mode) {
       const nextIndex = keyframes.findIndex(kf => kf.clip !== keyframes[0].clip);
       showKeyframeImage(nextIndex);
       return { preview: targetPreviewActive(),
-        pixel: [...targetFrame.getContext('2d').getImageData(258, 228, 1, 1).data] };
+        pixel: [...targetFrame.getContext('2d').getImageData(258, 233, 1, 1).data] };
     });
     assert.deepEqual(nextClip, { preview: false, pixel: masked });
     assert.deepEqual(errors, []);
-    console.log(`PASS ${mode}: V5 capture, ${Math.round(opening.elapsed)} ms opening preview, then masked playback`);
+    console.log(`PASS ${mode}: V5 capture, ${Math.round(opening.elapsed)} ms opening preview with fade, then masked playback`);
     return before.scoreFns;
   } catch (error) {
     console.error(mode, errors, await page.locator('#statusBar').textContent());

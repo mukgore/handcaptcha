@@ -11,7 +11,7 @@ function randomFromSeed(seed) {
 }
 
 test('randomized challenges keep both clips covered, visible, and articulated in three dimensions', () => {
-  assert.deepEqual(mask, { x: 258, y: 228, r: 90 });
+  assert.deepEqual(mask, { x: 258, y: 233, r: 95 });
   const patterns = new Set(), durations = new Set();
   let frameCount = 0;
   for (let seed = 0; seed < 128; seed++) {

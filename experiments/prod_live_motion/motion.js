@@ -3,7 +3,7 @@
 // Both renderers use the same fixed-length, articulated 3D hand.
 const LiveMotion = (() => {
   const WIDTH = 512, HEIGHT = 420, FPS = 30;
-  const MASK = { x: 258, y: 228, r: 90 };
+  const MASK = { x: 258, y: 233, r: 95 };
   const FINGERS = [
     { base: 1, origin: [-63, -65], lengths: [36, 27, 19], spread: -1.05, fan: -.9, flexion: [9, 15, 9], width: 15 },
     { base: 5, origin: [-60, -1], lengths: [45, 32, 25], spread: -.23, fan: -1, flexion: [21, 27, 20.8], width: 14 },
@@ -222,7 +222,7 @@ const LiveMotion = (() => {
 
   let renderSurface;
 
-  function paint(canvas, clip, time, mirror, mode, masked = true) {
+  function paint(canvas, clip, time, mirror, mode, maskOpacity = 1) {
     const index = clamp(Math.floor(time * FPS + 1e-6), 0, clip.frames.length - 1);
     const points = clip.frames[index];
     if (canvas.width !== WIDTH || canvas.height !== HEIGHT) {
@@ -239,7 +239,7 @@ const LiveMotion = (() => {
     ctx.fillStyle = background;
     ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
-    if (masked) {
+    if (maskOpacity === 1) {
       const path = new Path2D();
       path.rect(0, 0, WIDTH, HEIGHT);
       path.moveTo(MASK.x + MASK.r, MASK.y);
@@ -270,8 +270,9 @@ const LiveMotion = (() => {
     } else {
       paintFlatFingers(ctx, points);
     }
-    if (masked) {
-      ctx.restore();
+    if (maskOpacity === 1) ctx.restore();
+    if (maskOpacity > 0) {
+      ctx.globalAlpha = maskOpacity;
       ctx.fillStyle = '#070b10';
       ctx.beginPath();
       ctx.arc(MASK.x, MASK.y, MASK.r, 0, 2 * Math.PI);

@@ -31,10 +31,11 @@ experimentLabel.textContent = '가림 손동작 체험 · 결과는 이 브라�
 controls.after(experimentLabel);
 
 let liveTarget = null;
-const openingPreviewMs = 300;
+const openingPreviewMs = 500;
+const openingFadeMs = 500;
 
 function targetPreviewActive() {
-  return liveTarget?.epoch === attemptEpoch && liveTarget.drawnMasked === false;
+  return liveTarget?.epoch === attemptEpoch && liveTarget.drawnOpacity !== 1;
 }
 
 function liveTime() {
@@ -46,7 +47,7 @@ function setLiveTarget(keyframe, end = keyframe.time) {
   if (newAttempt) presentedModes.clear();
   const openingPose = newAttempt && keyframe === keyframes[0] && end === keyframe.time;
   liveTarget = { keyframe, start: keyframe.time, end, startedAt: performance.now(), epoch: attemptEpoch,
-    previewUntil: openingPose ? null : 0, drawnAt: -1, drawnMode: null, drawnMasked: null };
+    previewStartedAt: openingPose ? null : undefined, drawnAt: -1, drawnMode: null, drawnOpacity: null };
   rememberTarget();
 }
 
@@ -70,13 +71,15 @@ rememberTarget = function () {
   if (!liveTarget || liveTarget.epoch !== attemptEpoch) return;
   const { keyframe } = liveTarget;
   const time = Math.floor(liveTime() * keyframe.fps + 1e-6) / keyframe.fps;
-  const masked = liveTarget.previewUntil !== null && performance.now() >= liveTarget.previewUntil;
-  if (time === liveTarget.drawnAt && motionMode === liveTarget.drawnMode && masked === liveTarget.drawnMasked) return;
-  LiveMotion.paint(targetFrame, keyframe.clip, time, keyframe.mirror, motionMode, masked);
-  liveTarget.previewUntil ??= performance.now() + openingPreviewMs;
+  const start = liveTarget.previewStartedAt;
+  const opacity = start === undefined ? 1 : start === null ? 0 :
+    Math.min(1, Math.max(0, (performance.now() - start - openingPreviewMs) / openingFadeMs));
+  if (time === liveTarget.drawnAt && motionMode === liveTarget.drawnMode && opacity === liveTarget.drawnOpacity) return;
+  LiveMotion.paint(targetFrame, keyframe.clip, time, keyframe.mirror, motionMode, opacity);
+  if (start === null) liveTarget.previewStartedAt = performance.now();
   liveTarget.drawnAt = time;
   liveTarget.drawnMode = motionMode;
-  liveTarget.drawnMasked = masked;
+  liveTarget.drawnOpacity = opacity;
   presentedModes.add(motionMode);
   targetPending = false;
   targetPlaceholder.hidden = true;
