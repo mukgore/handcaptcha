@@ -3,6 +3,10 @@ const test = require('node:test');
 const { createChallenge, maskPasses, mask } = require('./motion.js');
 
 const names = Array.from({ length: 21 }, (_, i) => 'joint' + i);
+const baseAndLengths = [
+  [1, [56, 38, 33]], [5, [48, 27, 24]], [9, [54, 32, 26]],
+  [13, [50, 31, 26]], [17, [40, 22, 24]],
+];
 function randomFromSeed(seed) {
   return () => {
     seed = (Math.imul(1664525, seed) + 1013904223) >>> 0;
@@ -27,8 +31,12 @@ test('randomized challenges keep both clips covered, visible, and articulated in
       const [start, peak] = clip.keyframeIndices.map(index => clip.frames[index]);
       assert.ok(peak.some((p, i) => Math.abs(p.x - start[i].x) > 2 && Math.abs(p.z - start[i].z) > 10));
       for (const points of [start, peak]) {
-        const a = points[9], b = points[10];
-        assert.ok(Math.abs(Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z) - 43) < 1e-9);
+        for (const [base, lengths] of baseAndLengths) {
+          for (const [i, length] of lengths.entries()) {
+            const a = points[base + i], b = points[base + i + 1];
+            assert.ok(Math.abs(Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z) - length) < 1e-9);
+          }
+        }
       }
       frameCount += clip.frames.length;
     }
