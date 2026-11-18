@@ -66,7 +66,7 @@ async function check(browser, mode) {
     await page.waitForFunction(() => !videoPlaying && liveTime() === keyframes[1].time);
     const after = await page.evaluate(() => ({
       image: targetFrame.toDataURL(), clip: keyframes[kfIdx].clip.clip_id,
-      maskPixels: [[258, 122], [258, 298], [170, 210], [346, 210], [258, 115], [258, 305]]
+      maskPixels: [[258, 140], [258, 316], [170, 228], [346, 228], [258, 133], [258, 323]]
         .map(([x, y]) => [...targetFrame.getContext('2d').getImageData(x, y, 1, 1).data]),
     }));
     assert.equal(after.clip, before.clip);

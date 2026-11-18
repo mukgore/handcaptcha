@@ -3,7 +3,7 @@
 // Both renderers use the same fixed-length, articulated 3D hand.
 const LiveMotion = (() => {
   const WIDTH = 512, HEIGHT = 420, FPS = 30;
-  const MASK = { x: 258, y: 210, r: 90 };
+  const MASK = { x: 258, y: 228, r: 90 };
   const FINGERS = [
     { base: 1, origin: [-63, -65], lengths: [36, 27, 19], spread: -1.05, fan: -.9, flexion: [9, 15, 9], width: 15 },
     { base: 5, origin: [-60, -1], lengths: [45, 32, 25], spread: -.23, fan: -1, flexion: [21, 27, 20.8], width: 14 },
