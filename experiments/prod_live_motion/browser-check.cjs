@@ -9,6 +9,21 @@ async function check(browser, mode) {
   page.on('requestfailed', request => errors.push(request.url() + ' ' + request.failure()?.errorText));
   page.on('request', request => requests.push(request.url()));
   try {
+    await page.addInitScript(() => {
+      navigator.mediaDevices.getUserMedia = async () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 640;
+        canvas.height = 480;
+        const context = canvas.getContext('2d');
+        const draw = () => {
+          context.fillStyle = '#223344';
+          context.fillRect(0, 0, canvas.width, canvas.height);
+          requestAnimationFrame(draw);
+        };
+        draw();
+        return canvas.captureStream(30);
+      };
+    });
     await page.goto(mode === '3d' ? base : base + '?motion=' + mode);
     await page.waitForFunction(() => phase === 'detecting_hand' && cv.readyState >= 2, null, { timeout: 60000 });
     assert.equal(await page.locator('.motion-control select').inputValue(), mode);
@@ -43,7 +58,7 @@ async function check(browser, mode) {
     assert.notEqual(after.image, before.image);
     assert.deepEqual(after.color, [7, 11, 16, 255]);
     assert.deepEqual(errors, []);
-    console.log(`PASS ${mode}: acquired camera, generated masked frames, played and held the next pose`);
+    console.log(`PASS ${mode}: initialized capture, generated masked frames, played and held the next pose`);
     return before.scoreFns;
   } catch (error) {
     console.error(mode, errors, await page.locator('#statusBar').textContent());
@@ -57,7 +72,6 @@ async function check(browser, mode) {
   const browser = await chromium.launch({
     executablePath: process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe',
     headless: true,
-    args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'],
   });
   try {
     const baseline = await check(browser, 'recorded');
