@@ -16,6 +16,7 @@ function replace(original, replacement) {
 
 replace('<title>손 동작 CAPTCHA</title>', '<title>손동작 CAPTCHA · 실시간 생성</title>');
 replace('    <base href="../../">', '    <base href="../../">\n    <link rel="stylesheet" href="experiments/prod_live_motion/live.css">');
+replace('id="cameraVideo" playsinline autoplay', 'id="cameraVideo" playsinline autoplay muted');
 replace('    if(landmarksCache[clip.clip_id])', '    if(clip.landmarks) return clip.landmarks;\n    if(landmarksCache[clip.clip_id])');
 replace('    const candidates = poolManifest && poolManifest.clips || [];',
   "    const candidates = motionMode === 'recorded' ? poolManifest.clips : LiveMotion.createChallenge(LN);");

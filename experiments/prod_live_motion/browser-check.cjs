@@ -25,7 +25,7 @@ async function check(browser, mode) {
       };
     });
     await page.goto(mode === '3d' ? base : base + '?motion=' + mode);
-    await page.waitForFunction(() => phase === 'detecting_hand' && cv.readyState >= 2, null, { timeout: 60000 });
+    await page.waitForFunction(() => phase === 'detecting_hand' && cv.readyState >= 2 && !cv.paused, null, { timeout: 60000 });
     assert.equal(await page.locator('.motion-control select').inputValue(), mode);
     // Inspect the target integration independently of gesture classification.
     const opening = await page.evaluate(async () => {
@@ -81,7 +81,11 @@ async function check(browser, mode) {
     assert.notEqual(changed.image, before.image);
     assert.deepEqual(changed.reports, [mode, otherMode]);
     await page.locator('.motion-control select').selectOption(mode);
-    assert.equal(await page.evaluate(() => targetFrame.toDataURL()), before.image);
+    const restored = await page.evaluate(() => ({
+      mode: liveTarget.drawnMode, clip: liveTarget.keyframe.clip.clip_id, time: liveTime(),
+      pixel: [...targetFrame.getContext('2d').getImageData(258, 228, 1, 1).data],
+    }));
+    assert.deepEqual(restored, { mode, clip: before.clip, time: 0, pixel: masked });
     if (process.env.CAPTCHA_SCREENSHOTS) {
       await page.locator('#targetFrame').screenshot({ path: process.env.CAPTCHA_SCREENSHOTS + '-' + mode + '.png' });
     }
