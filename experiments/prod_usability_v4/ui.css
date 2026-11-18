@@ -1,0 +1,26 @@
+.trial-content>.trial-panel:first-child,body>.header,body>.intro-banner{display:none}
+.trial-content{padding:10px 16px}
+.hand-views{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:12px;flex:1;min-height:0;padding:12px;background:#eef2f7}
+.hand-view{display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden;border-radius:10px;background:#0f172a}
+.hand-view h2{font-size:14px;padding:9px 12px;background:#fff;color:#0f172a}
+.hand-views[data-primary="own"] .own-view{order:-1}
+.hand-views[data-primary="target"] .own-view,.hand-views[data-primary="own"] .target-view{height:72%;align-self:center}
+.target-surface{position:relative;display:grid;place-items:center;flex:1;min-height:0;color:#e2e8f0}
+.target-surface canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+.target-surface p{z-index:1;text-align:center;padding:12px;font-size:13px}
+.camera-area{isolation:isolate}
+.camera-placeholder{position:absolute;z-index:3;background:#0f172ae6;border-radius:8px}
+.panel-header{gap:12px;flex-wrap:wrap}
+.usability-controls{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:10px;padding:10px;font-size:13px;background:white}
+.usability-controls button{padding:7px 12px;border:1px solid #cbd5e1;border-radius:6px;background:white;cursor:pointer}
+.usability-controls #swapHandViews{background:#2563eb;color:#fff;border-color:#2563eb}
+.status-bar{line-height:1.55;padding:10px 16px}
+.camera-area .center-hint{position:absolute;inset:auto;top:50%;left:50%;transform:translate(-50%,-50%);width:max-content;max-width:calc(100% - 32px);z-index:2;background:#0f172ae6;color:#fff;border-radius:12px;font-size:clamp(15px,2.3vw,20px);padding:14px 20px;pointer-events:none}
+@media(max-width:700px){
+  .trial-content{padding:6px;overflow:auto}
+  .trial-content>.trial-panel:last-child{min-height:430px}
+  .hand-views{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1.6fr) minmax(0,1fr);gap:8px;padding:8px}
+  .hand-views[data-primary="target"] .own-view,.hand-views[data-primary="own"] .target-view{height:100%;width:80%;justify-self:center}
+  .hand-view h2,.panel-header{padding:6px 10px}
+  .usability-controls{padding:6px;gap:6px;font-size:12px}
+}
