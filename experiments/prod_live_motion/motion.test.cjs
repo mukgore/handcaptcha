@@ -15,7 +15,7 @@ function randomFromSeed(seed) {
 }
 
 test('randomized challenges keep both clips covered, visible, and articulated in three dimensions', () => {
-  assert.deepEqual(mask, { x: 225, y: 265, r: 95 });
+  assert.deepEqual(mask, { x: 256, y: 210, r: 95 });
   const patterns = new Set(), durations = new Set();
   let frameCount = 0;
   for (let seed = 0; seed < 128; seed++) {
@@ -25,7 +25,12 @@ test('randomized challenges keep both clips covered, visible, and articulated in
     for (const clip of clips) {
       patterns.add(clip.motion);
       durations.add(clip.frames.length);
-      assert.ok(clip.frames.every(maskPasses));
+      assert.ok(clip.frames.every(points => {
+        const [wrist, middleMcp] = [points[0], points[9]];
+        return maskPasses(points) &&
+          Math.abs((wrist.x + middleMcp.x) / 2 - mask.x) < 1e-9 &&
+          Math.abs((wrist.y + middleMcp.y) / 2 - mask.y) < 1e-9;
+      }));
       assert.equal(clip.frames.length, clip.keyframeIndices.at(-1) + 1);
       assert.deepEqual(clip.landmarks.frames.at(-1).landmarks_px.joint20, clip.frames.at(-1)[20]);
       const [start, peak] = clip.keyframeIndices.map(index => clip.frames[index]);
@@ -34,7 +39,7 @@ test('randomized challenges keep both clips covered, visible, and articulated in
         for (const [base, lengths] of baseAndLengths) {
           for (const [i, length] of lengths.entries()) {
             const a = points[base + i], b = points[base + i + 1];
-            assert.ok(Math.abs(Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z) - length) < 1e-9);
+            assert.ok(Math.abs(Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z) - length * .76) < 1e-9);
           }
         }
       }

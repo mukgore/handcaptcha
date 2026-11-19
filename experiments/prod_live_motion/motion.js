@@ -3,7 +3,8 @@
 // Both renderers use the same fixed-length, articulated 3D hand.
 const LiveMotion = (() => {
   const WIDTH = 512, HEIGHT = 420, FPS = 30;
-  const MASK = { x: 225, y: 265, r: 95 };
+  const MASK = { x: WIDTH / 2, y: HEIGHT / 2, r: 95 };
+  const HAND_SCALE = .76;
   const WRIST_Y = -114;
   // Buryanov & Kotiuk (2010), Table I. Lengths are rounded at roughly
   // 1.21 model units/mm, including the measured soft tissue at the fingertips.
@@ -28,11 +29,11 @@ const LiveMotion = (() => {
 
   function project(point, motion) {
     const [x, y, z] = point;
-    const yaw = -.4 + motion.yaw, pitch = -.14 + motion.pitch;
+    const yaw = motion.yaw, pitch = -.52 + motion.pitch;
     const xx = Math.cos(yaw) * x + Math.sin(yaw) * z;
     const zz = Math.cos(yaw) * z - Math.sin(yaw) * x;
-    // Turn around the wrist, keeping its projected location stable.
-    return { x: 219 + xx, y: 390 - Math.cos(pitch) * (y - WRIST_Y) + Math.sin(pitch) * zz,
+    // Project around the wrist in model units before centering the palm.
+    return { x: xx, y: -Math.cos(pitch) * (y - WRIST_Y) + Math.sin(pitch) * zz,
       z: Math.sin(pitch) * (y - WRIST_Y) + Math.cos(pitch) * zz };
   }
 
@@ -53,7 +54,12 @@ const LiveMotion = (() => {
         points[finger.base + segment + 1] = project([x, y, z], motion);
       }
     }
-    return points;
+    const palm = mixPoint(points[0], points[9], .5);
+    return points.map(p => ({
+      x: MASK.x + (p.x - palm.x) * HAND_SCALE,
+      y: MASK.y + (p.y - palm.y) * HAND_SCALE,
+      z: p.z * HAND_SCALE,
+    }));
   }
 
   const distance = p => Math.hypot(p.x - MASK.x, p.y - MASK.y);
@@ -62,16 +68,13 @@ const LiveMotion = (() => {
   const clearTip = p => distance(p) >= MASK.r + 9;
 
   function maskPasses(points) {
-    const middle = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
-    const [mcp, pip, dip] = points.slice(9, 12);
-    const inside = [pip, middle(mcp, pip), middle(pip, dip)]
-      .every(p => distance(p) <= MASK.r * .85);
-    // A disk is convex, so control points with the radius plus a 2px margin
-    // inside it cover the protected proximal surfaces between the joints.
-    const middleRadius = FINGERS[2].width;
-    const covered = [mcp, pip, dip].every(p => distance(p) + middleRadius + 2 <= MASK.r);
+    const [mcp, pip] = points.slice(9, 11);
+    const middleRadius = FINGERS[2].width * HAND_SCALE;
+    // With the mask centered on the palm, protect the first segment and PIP.
+    // The disk is convex, so both surrounding disks cover the full segment.
+    const covered = [mcp, pip].every(p => distance(p) + middleRadius + 2 <= MASK.r);
     const visible = TIP_INDICES.filter(i => clearTip(points[i]));
-    return inside && covered && visible.length >= 2 && points.every(p =>
+    return covered && visible.length >= 2 && points.every(p =>
       Number.isFinite(p.z) && p.x >= 16 && p.x <= WIDTH - 16 && p.y >= 16 && p.y <= HEIGHT - 16);
   }
 
@@ -292,7 +295,13 @@ const LiveMotion = (() => {
 
   function paint(canvas, clip, time, mirror, mode, maskOpacity = 1) {
     const index = clamp(Math.floor(time * FPS + 1e-6), 0, clip.frames.length - 1);
-    const points = clip.frames[index];
+    // Draw the authored skin at its native scale, then apply the same uniform
+    // scale as the projected landmarks. The circle stays in canvas pixels.
+    const points = clip.frames[index].map(p => ({
+      x: MASK.x + (p.x - MASK.x) / HAND_SCALE,
+      y: MASK.y + (p.y - MASK.y) / HAND_SCALE,
+      z: p.z / HAND_SCALE,
+    }));
     if (canvas.width !== WIDTH || canvas.height !== HEIGHT) {
       canvas.width = WIDTH;
       canvas.height = HEIGHT;
@@ -315,6 +324,10 @@ const LiveMotion = (() => {
       ctx.save();
       ctx.clip(path, 'evenodd');
     }
+    ctx.save();
+    ctx.translate(MASK.x, MASK.y);
+    ctx.scale(HAND_SCALE, HAND_SCALE);
+    ctx.translate(-MASK.x, -MASK.y);
     const outline = palmOutline(points);
     if (depth && renderSurface === undefined) renderSurface = makeSurfaceRenderer();
     if (!depth || !renderSurface?.(ctx, points, outline)) {
@@ -327,6 +340,7 @@ const LiveMotion = (() => {
       if (depth) paintShadedStrokes(ctx, points);
       else paintFlatFingers(ctx, points);
     }
+    ctx.restore();
     if (maskOpacity === 1) ctx.restore();
     if (maskOpacity > 0) {
       ctx.globalAlpha = maskOpacity;

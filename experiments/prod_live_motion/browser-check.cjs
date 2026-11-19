@@ -33,7 +33,7 @@ async function check(browser, mode) {
       await genSequence();
       startRealChallenge();
       if (motionMode === 'recorded') return null;
-      const pixel = () => [...targetFrame.getContext('2d').getImageData(225, 265, 1, 1).data];
+      const pixel = () => [...targetFrame.getContext('2d').getImageData(256, 210, 1, 1).data];
       const firstPixel = pixel();
       const start = liveTarget.previewStartedAt;
       const during = { active: targetPreviewActive(), firstPixel, initialOpacity: liveTarget.drawnOpacity };
@@ -92,7 +92,7 @@ async function check(browser, mode) {
     await page.locator('.motion-control select').selectOption(mode);
     const restored = await page.evaluate(() => ({
       mode: liveTarget.drawnMode, clip: liveTarget.keyframe.clip.clip_id, time: liveTime(),
-      pixel: [...targetFrame.getContext('2d').getImageData(225, 265, 1, 1).data],
+      pixel: [...targetFrame.getContext('2d').getImageData(256, 210, 1, 1).data],
     }));
     assert.deepEqual(restored, { mode, clip: before.clip, time: 0, pixel: masked });
     if (process.env.CAPTCHA_SCREENSHOTS) {
@@ -104,7 +104,7 @@ async function check(browser, mode) {
     await page.waitForFunction(() => !videoPlaying && liveTime() === keyframes[1].time);
     const after = await page.evaluate(() => ({
       image: targetFrame.toDataURL(), clip: keyframes[kfIdx].clip.clip_id,
-      maskPixels: [[225, 172], [225, 358], [132, 265], [318, 265], [225, 166], [225, 364]]
+      maskPixels: [[256, 117], [256, 303], [163, 210], [349, 210], [256, 111], [256, 309]]
         .map(([x, y]) => [...targetFrame.getContext('2d').getImageData(x, y, 1, 1).data]),
     }));
     assert.equal(after.clip, before.clip);
@@ -115,7 +115,7 @@ async function check(browser, mode) {
       const nextIndex = keyframes.findIndex(kf => kf.clip !== keyframes[0].clip);
       showKeyframeImage(nextIndex);
       return { preview: targetPreviewActive(),
-        pixel: [...targetFrame.getContext('2d').getImageData(225, 265, 1, 1).data] };
+        pixel: [...targetFrame.getContext('2d').getImageData(256, 210, 1, 1).data] };
     });
     assert.deepEqual(nextClip, { preview: false, pixel: masked });
     assert.deepEqual(errors, []);
