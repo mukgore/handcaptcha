@@ -57,9 +57,9 @@
         .redirect-msg{text-align:center;color:var(--text-secondary);font-size:13px;margin-top:12px}
         @media(max-width:768px){.trial-content{flex-direction:column;padding:6px;gap:6px}.trial-panel{flex:1 1 0;min-height:0}.header{padding:8px 12px}.header-title{font-size:14px}.panel-header{padding:6px 12px}.btn{padding:9px 20px;font-size:14px}}
     </style>
-    <link rel="stylesheet" href="first-use.css?v=auto-palm">
+    <link rel="stylesheet" href="first-use.css?v=mask-intro">
     <script defer src="study.js"></script>
-    <script defer src="app.js?v=auto-palm"></script>
+    <script defer src="app.js?v=mask-intro"></script>
 </head>
 <body>
 <div class="header"><div class="header-icon">H</div><div class="header-title">손 동작 CAPTCHA</div></div>
@@ -83,7 +83,10 @@
         <div class="trial-panel">
             <div class="panel-header"><span class="panel-title" id="referenceTitle">손바닥 예시</span><span class="panel-badge" id="kfLabel">준비 중</span></div>
             <div class="ref-area">
-                <img id="palmExample" src="palm.svg" alt="손금과 손가락 끝이 보이는 손바닥 정면">
+                <svg id="palmExample" viewBox="0 0 84 104" role="img" aria-label="손바닥 예시">
+                    <image href="palm.svg" width="84" height="104"/>
+                    <circle id="palmMask" cx="48" cy="65" r="27" fill="#000"/>
+                </svg>
                 <video id="refVideo" muted playsinline></video>
             </div>
         </div>
@@ -98,7 +101,7 @@
         <div class="kf-progress" id="kfProgress"></div>
     </div>
     <div class="trial-actions">
-        <p id="prepareHint">손바닥이 카메라를 향하면 자동으로 시작해요.</p>
+        <p id="prepareHint" role="status">손바닥을 보여주면 곧 시작해요.</p>
         <p id="trialStatus" role="status"></p>
         <button type="button" class="btn btn-primary" id="retryButton" hidden>다시 시도</button>
     </div>

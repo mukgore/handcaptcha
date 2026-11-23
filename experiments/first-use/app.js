@@ -28,6 +28,10 @@ const HANDEDNESS_MIN_SCORE = 0.7;
 const PALM_FACING_MIN = 0.65;
 const PALM_HOLD_MS = 450;
 const PALM_SAMPLE_GAP_MS = 300;
+const PALM_EXAMPLE_MS = 1500;
+const MASK_INSTRUCTION_MS = 2000;
+const PALM_HINT = '손바닥을 보여주면 곧 시작해요.';
+const MASK_HINT = '검은 원 밖으로 보이는 손가락을 보고, 영상 속 손동작을 따라 해 주세요.';
 
 let selectedHand = null;
 const pid = 'user_' + Date.now().toString().slice(-4);
@@ -265,6 +269,8 @@ function sendResult(payload){
 const trial = byId('screenTrial');
 const cameraButton = byId('cameraButton');
 const retryButton = byId('retryButton');
+const prepareHint = byId('prepareHint');
+const palmMask = byId('palmMask');
 const demo = byId('demoVideo');
 const demoFallback = byId('demoFallback');
 const MEDIA_TIMEOUT_MS = 12000;
@@ -294,6 +300,18 @@ function showDemo() {
 
 function afterPaint() {
     return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+}
+
+function waitForGuide(ms, signal) {
+    return new Promise(resolve => {
+        const finish = () => {
+            clearTimeout(timer);
+            signal.removeEventListener('abort', finish);
+            resolve();
+        };
+        const timer = setTimeout(finish, ms);
+        signal.addEventListener('abort', finish, {once: true});
+    });
 }
 
 function withMediaTimeout(promise, signal) {
@@ -365,6 +383,8 @@ function resetAttempt() {
 function showPreparation(text = '') {
     trial.dataset.stage = 'prepare';
     delete trial.dataset.pending;
+    delete trial.dataset.masked;
+    prepareHint.textContent = PALM_HINT;
     byId('trialTitle').textContent = '‘내 손’ 화면에 손바닥이 보이게 해 주세요.';
     byId('referenceTitle').textContent = '손바닥 예시';
     byId('trialStatus').textContent = text;
@@ -635,12 +655,22 @@ async function startChallenge(side) {
     if (phase !== 'preparing' || !preparationReady || !camStream) return;
     const {signal} = operation;
     phase = 'starting';
-    byId('trialStatus').textContent = '동작을 준비하는 중…';
+    byId('trialStatus').textContent = '';
+    prepareHint.textContent = '손바닥을 확인했어요.';
     trialNumber++;
     markStudy('palm_confirmed', {trial: trialNumber});
     selectedHand = side;
     configureSequence(selectedHand);
     try {
+        await waitForGuide(PALM_EXAMPLE_MS, signal);
+        if (signal.aborted) return;
+        trial.dataset.masked = '';
+        await Promise.allSettled(palmMask.getAnimations().map(animation => animation.finished));
+        if (signal.aborted) return;
+        prepareHint.textContent = MASK_HINT;
+        markStudy('mask_instruction_shown', {trial: trialNumber});
+        await waitForGuide(MASK_INSTRUCTION_MS, signal);
+        if (signal.aborted) return;
         // The first prod target is a paused frame. Movement starts after its match.
         await seekKeyframe(keyframes[0], signal);
         if (signal.aborted) return;
