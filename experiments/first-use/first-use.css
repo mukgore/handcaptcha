@@ -7,6 +7,8 @@ h1 { font-size: clamp(1.125rem, 3vw, 1.625rem); line-height: 1.4; text-align: ce
 
 #screenIntro { gap: 14px; justify-content: flex-start; padding-block: clamp(24px, 6vh, 64px); }
 .intro-illustration { display: block; width: min(100%, 520px); height: auto; border-radius: var(--radius); box-shadow: var(--shadow); }
+.intro-privacy { align-self: flex-start; display: flex; align-items: flex-start; gap: 8px; margin-top: auto; color: #475569; font-size: .8125rem; line-height: 1.5; word-break: keep-all; }
+.intro-privacy svg { flex: 0 0 16px; height: 16px; margin-top: 2px; }
 #cameraStatus, #trialStatus { color: var(--text-secondary); text-align: center; }
 #cameraStatus:empty, #trialStatus:empty { display: none; }
 

@@ -39,7 +39,7 @@
         .redirect-msg{text-align:center;color:var(--text-secondary);font-size:13px;margin-top:12px}
         @media(max-width:768px){.trial-content{flex-direction:column;padding:6px;gap:6px}.trial-panel{flex:1 1 0;min-height:0}.header{padding:8px 12px}.header-title{font-size:14px}.panel-header{padding:6px 12px}.btn{padding:9px 20px;font-size:14px}}
     </style>
-    <link rel="stylesheet" href="first-use.css?v=feedback-attention">
+    <link rel="stylesheet" href="first-use.css?v=intro-privacy">
     <script defer src="study.js"></script>
     <script defer src="app.js?v=feedback-attention"></script>
 </head>
@@ -51,6 +51,13 @@
         alt="노트북 화면 속 검은 원 밖으로 보이는 손가락 자세를 카메라 앞에서 따라 하는 모습">
     <p id="cameraStatus" role="status"></p>
     <button type="button" class="btn btn-primary" id="cameraButton">카메라 켜고 준비하기</button>
+    <p class="intro-privacy">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.8">
+            <rect x="5" y="10" width="14" height="11" rx="2"/>
+            <path d="M8 10V7a4 4 0 1 1 8 0v3"/>
+        </svg>
+        <span>손동작 분석에는 관절 데이터를 사용합니다. 카메라 영상은 저장하거나 전송하지 않습니다.</span>
+    </p>
 </main>
 
 <main class="trial-container" id="screenTrial" data-stage="prepare">
