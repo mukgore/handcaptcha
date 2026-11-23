@@ -124,11 +124,10 @@ function angleErr(uLm, tLm){
     return tot/c;
 }
 
-// ===== GHOST HAND SILHOUETTE (spec §7.3: flat-color, ~40-50% opacity, no proximity color-coding) =====
-function updateDots(activeIdx){
-    for(let i=0;i<keyframes.length;i++){
-        document.getElementById('kfd'+i).className = 'kf-dot'+(i<activeIdx?' done':i===activeIdx?' active':'');
-    }
+function updateProgress(step) {
+    progressBar.setAttribute('aria-valuemax', keyframes.length);
+    progressBar.setAttribute('aria-valuenow', step);
+    progressBar.firstElementChild.style.width = `${step / keyframes.length * 100}%`;
 }
 function updateMatchIndicator(cls, text){
     const mi=document.getElementById('matchInd'); mi.className='match-indicator '+cls; mi.textContent=text;
@@ -142,10 +141,7 @@ function onTransitionMatched(){
         frames: curSegFrames.slice(),
         duration: curSegFrames.length>0 ? curSegFrames[curSegFrames.length-1].t : 0
     });
-    document.getElementById('kfd'+(kfIdx-1)).className = 'kf-dot done';
-
     if(kfIdx >= keyframes.length-1){
-        document.getElementById('kfd'+kfIdx).className = 'kf-dot done';
         phase = 'done';
         updateMatchIndicator('matched', '완료');
         setS('complete', '✅ 모든 동작이 완료되었습니다!');
@@ -270,7 +266,9 @@ const trial = byId('screenTrial');
 const cameraButton = byId('cameraButton');
 const retryButton = byId('retryButton');
 const prepareHint = byId('prepareHint');
+const palmExample = byId('palmExample');
 const palmMask = byId('palmMask');
+const progressBar = byId('kfProgress');
 const demo = byId('demoVideo');
 const demoFallback = byId('demoFallback');
 const MEDIA_TIMEOUT_MS = 12000;
@@ -384,6 +382,7 @@ function showPreparation(text = '') {
     trial.dataset.stage = 'prepare';
     delete trial.dataset.pending;
     delete trial.dataset.masked;
+    palmExample.removeAttribute('aria-hidden');
     prepareHint.textContent = PALM_HINT;
     byId('trialTitle').textContent = '‘내 손’ 화면에 손바닥이 보이게 해 주세요.';
     byId('referenceTitle').textContent = '손바닥 예시';
@@ -394,6 +393,7 @@ function showPreparation(text = '') {
 
 function showChallenge() {
     trial.dataset.stage = 'perform';
+    palmExample.setAttribute('aria-hidden', 'true');
     byId('trialTitle').textContent = '영상이 움직이면 함께 따라 해 주세요.';
     byId('referenceTitle').textContent = '따라 할 동작';
     byId('trialStatus').textContent = '';
@@ -553,22 +553,6 @@ function configureSequence(hand) {
             baseLm: frames[frameIdx], allBaseLm: frames, fps
         }));
     });
-    byId('kfProgress').replaceChildren(...keyframes.map((_, index) => {
-        const step = document.createElement('div');
-        step.className = 'kf-step';
-        const dot = document.createElement('div');
-        dot.className = 'kf-dot';
-        dot.id = 'kfd' + index;
-        dot.textContent = index + 1;
-        step.append(dot);
-        if (index < keyframes.length - 1) {
-            const arrow = document.createElement('span');
-            arrow.className = 'kf-arrow';
-            arrow.textContent = '→';
-            step.append(arrow);
-        }
-        return step;
-    }));
 }
 
 async function seekKeyframe(kf, signal) {
@@ -648,7 +632,7 @@ function showTarget(index) {
     targetLm = kf.baseLm;
     rv.style.transform = kf.mirror ? 'scaleX(-1)' : 'none';
     byId('kfLabel').textContent = `자세 ${index + 1}/${keyframes.length}`;
-    updateDots(index);
+    updateProgress(index + 1);
 }
 
 async function startChallenge(side) {
@@ -675,7 +659,6 @@ async function startChallenge(side) {
         await seekKeyframe(keyframes[0], signal);
         if (signal.aborted) return;
         showTarget(0);
-        byId('frameCounter').textContent = '0 프레임';
         setS('waiting', '목표 동작을 따라해주세요');
         updateMatchIndicator('waiting', '자세를 맞춰주세요');
         requestAnimationFrame(() => {
@@ -737,7 +720,6 @@ async function beginNextTransition() {
         }
 
         showTarget(kfIdx);
-        byId('kfd' + (kfIdx - 1)).className = 'kf-dot rec';
         setS('playing', '영상을 보면서 다음 자세를 준비하세요');
         updateMatchIndicator('playing', '▶ 영상 재생 중...');
         await seekKeyframe(from, signal);
@@ -780,7 +762,6 @@ function onRes(result, capturedAt) {
     if (phase === 'recording') {
         if (capturedAt < recStart) return;
         curSegFrames.push({t: capturedAt - recStart, lm: userLm});
-        byId('frameCounter').textContent = curSegFrames.length + ' 프레임';
         if (videoPlaying) return;
     }
     const matched = userLm && angleErr(ppSingle(userLm), ppSingle(targetLm)) < MATCH_ANGLE_THRESH;

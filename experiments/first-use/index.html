@@ -32,13 +32,6 @@
         .match-indicator.playing{background:rgba(37,99,235,.9);color:#fff}
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
         .camera-area{flex:1;display:flex;align-items:center;justify-content:center;background:#0f172a;position:relative;min-height:0}
-        .kf-progress{display:flex;gap:8px;justify-content:center;padding:10px;flex-shrink:0;flex-wrap:wrap}
-        .kf-step{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text-secondary)}
-        .kf-dot{width:28px;height:28px;border-radius:50%;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;transition:all .3s}
-        .kf-dot.active{border-color:var(--accent);background:#fef3c7;color:#92400e}
-        .kf-dot.done{border-color:var(--success);background:#dcfce7;color:#166534}
-        .kf-dot.rec{border-color:var(--danger);background:#fee2e2;color:#991b1b;animation:pulse 1s infinite}
-        .kf-arrow{color:var(--border);font-size:16px}
         .status-bar{padding:8px 16px;text-align:center;font-size:13px;font-weight:500;flex-shrink:0}
         .status-bar.waiting{background:#fef3c7;color:#92400e}
         .status-bar.recording{background:#fee2e2;color:#991b1b}
@@ -57,9 +50,9 @@
         .redirect-msg{text-align:center;color:var(--text-secondary);font-size:13px;margin-top:12px}
         @media(max-width:768px){.trial-content{flex-direction:column;padding:6px;gap:6px}.trial-panel{flex:1 1 0;min-height:0}.header{padding:8px 12px}.header-title{font-size:14px}.panel-header{padding:6px 12px}.btn{padding:9px 20px;font-size:14px}}
     </style>
-    <link rel="stylesheet" href="first-use.css?v=mask-intro">
+    <link rel="stylesheet" href="first-use.css?v=reference-fade">
     <script defer src="study.js"></script>
-    <script defer src="app.js?v=mask-intro"></script>
+    <script defer src="app.js?v=reference-fade"></script>
 </head>
 <body>
 <div class="header"><div class="header-icon">H</div><div class="header-title">손 동작 CAPTCHA</div></div>
@@ -83,22 +76,24 @@
         <div class="trial-panel">
             <div class="panel-header"><span class="panel-title" id="referenceTitle">손바닥 예시</span><span class="panel-badge" id="kfLabel">준비 중</span></div>
             <div class="ref-area">
-                <svg id="palmExample" viewBox="0 0 84 104" role="img" aria-label="손바닥 예시">
-                    <image href="palm.svg" width="84" height="104"/>
-                    <circle id="palmMask" cx="48" cy="65" r="27" fill="#000"/>
-                </svg>
                 <video id="refVideo" muted playsinline></video>
+                <div id="palmExample">
+                    <svg viewBox="0 0 84 104" role="img" aria-label="손바닥 예시">
+                        <image href="palm.svg" width="84" height="104"/>
+                        <circle id="palmMask" cx="48" cy="65" r="27" fill="#000"/>
+                    </svg>
+                </div>
             </div>
         </div>
         <div class="trial-panel">
-            <div class="panel-header"><span class="panel-title">내 손</span><span class="panel-badge" id="frameCounter">0 프레임</span></div>
+            <div class="panel-header"><span class="panel-title">내 손</span></div>
             <div class="camera-area"><video id="cameraVideo" playsinline muted autoplay></video></div>
             <div class="status-bar waiting" id="statusBar">손을 비춰주세요</div>
         </div>
     </div>
     <div class="trial-feedback">
         <div class="match-indicator waiting" id="matchInd">손을 비춰주세요</div>
-        <div class="kf-progress" id="kfProgress"></div>
+        <div class="kf-progress" id="kfProgress" role="progressbar" aria-label="동작 진행 단계" aria-valuenow="0"><div class="kf-progress-fill"></div></div>
     </div>
     <div class="trial-actions">
         <p id="prepareHint" role="status">손바닥을 보여주면 곧 시작해요.</p>
