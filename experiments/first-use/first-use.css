@@ -40,13 +40,15 @@ h1 { font-size: clamp(1.125rem, 3vw, 1.625rem); line-height: 1.4; text-align: ce
 .kf-progress-fill { width: 0; height: 100%; border-radius: inherit; background: var(--primary); transition: width 250ms ease-out; }
 
 @media (prefers-reduced-motion: no-preference) {
-    .kf-progress[data-attention] { animation: progress-attention 420ms ease-in-out; }
+    .trial-feedback[data-attention] { animation: feedback-attention 620ms ease-in-out; }
 }
 
-@keyframes progress-attention {
-    0%, 100% { transform: translateX(0); }
-    22%, 64% { transform: translateX(-3px); }
-    43%, 83% { transform: translateX(3px); }
+@keyframes feedback-attention {
+    0%, 54%, 100% { transform: translateX(0); }
+    16% { transform: translateX(-7px); }
+    36% { transform: translateX(7px); }
+    68% { transform: translateX(-3px); }
+    84% { transform: translateX(3px); }
 }
 
 @media (prefers-reduced-motion: reduce) {

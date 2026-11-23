@@ -138,26 +138,26 @@ const motionMessages = {
     complete: ['모든 동작을 완료했어요', '']
 };
 
-const PROGRESS_ATTENTION_DELAY_MS = 3000;
-let progressAttentionTimer;
+const FEEDBACK_ATTENTION_DELAY_MS = 3000;
+let feedbackAttentionTimer;
 
-function clearProgressAttention() {
-    clearTimeout(progressAttentionTimer);
-    delete progressBar.dataset.attention;
+function clearFeedbackAttention() {
+    clearTimeout(feedbackAttentionTimer);
+    delete feedbackCard.dataset.attention;
 }
 
 function setMotionStatus(state) {
     const status = byId('motionStatus');
     if (status.dataset.status === state) return;
-    clearProgressAttention();
+    clearFeedbackAttention();
     const [title, detail] = motionMessages[state];
     status.dataset.status = state;
     byId('motionTitle').textContent = title;
     byId('motionDetail').textContent = detail;
     if (state === 'waiting' || state === 'missing') {
-        progressAttentionTimer = setTimeout(() => {
-            if (trial.dataset.stage === 'perform') progressBar.dataset.attention = '';
-        }, PROGRESS_ATTENTION_DELAY_MS);
+        feedbackAttentionTimer = setTimeout(() => {
+            if (trial.dataset.stage === 'perform') feedbackCard.dataset.attention = '';
+        }, FEEDBACK_ATTENTION_DELAY_MS);
     }
 }
 
@@ -294,6 +294,7 @@ const retryButton = byId('retryButton');
 const prepareHint = byId('prepareHint');
 const palmExample = byId('palmExample');
 const palmMask = byId('palmMask');
+const feedbackCard = byId('trialFeedback');
 const progressBar = byId('kfProgress');
 const MEDIA_TIMEOUT_MS = 12000;
 const HANDS_BASE = 'https://unpkg.com/@mediapipe/hands@0.4.1675469240/';
@@ -411,7 +412,7 @@ function reportFailure(reason, text, reconnect = false) {
     const started = sessionStart !== null;
     markStudy(started ? 'attempt_incomplete' : 'technical_error', {reason, trial: trialNumber});
     cancelOperation();
-    clearProgressAttention();
+    clearFeedbackAttention();
     delete byId('motionStatus').dataset.status;
     rv.pause();
     preparationReady = false;
@@ -794,7 +795,7 @@ rv.addEventListener('error', () => {
 window.addEventListener('pagehide', () => {
     if (sessionStart !== null && phase !== 'done') markStudy('attempt_incomplete', {reason: 'page_left', trial: trialNumber});
     cancelOperation();
-    clearProgressAttention();
+    clearFeedbackAttention();
     stopCamera();
 });
 markStudy('intro_shown');
