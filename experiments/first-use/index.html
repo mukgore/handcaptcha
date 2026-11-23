@@ -25,18 +25,7 @@
         .panel-title{font-weight:600;font-size:14px}
         .panel-badge{font-size:12px;padding:3px 10px;background:#f1f5f9;border-radius:20px;color:var(--text-secondary);font-weight:500}
         .ref-area{flex:1;display:flex;align-items:center;justify-content:center;background:#0f172a;position:relative;min-height:0}
-        .match-indicator{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);padding:6px 16px;border-radius:20px;font-size:13px;font-weight:600;z-index:5;transition:all .2s}
-        .match-indicator.waiting{background:rgba(245,158,11,.9);color:#fff}
-        .match-indicator.matched{background:rgba(22,163,74,.9);color:#fff}
-        .match-indicator.recording{background:rgba(220,38,38,.9);color:#fff;animation:pulse 1s infinite}
-        .match-indicator.playing{background:rgba(37,99,235,.9);color:#fff}
-        @keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
         .camera-area{flex:1;display:flex;align-items:center;justify-content:center;background:#0f172a;position:relative;min-height:0}
-        .status-bar{padding:8px 16px;text-align:center;font-size:13px;font-weight:500;flex-shrink:0}
-        .status-bar.waiting{background:#fef3c7;color:#92400e}
-        .status-bar.recording{background:#fee2e2;color:#991b1b}
-        .status-bar.playing{background:#dbeafe;color:#1e40af}
-        .status-bar.complete{background:#dcfce7;color:#166534;font-weight:700}
         .result-card{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);padding:32px;max-width:480px;width:100%}
         .result-card h2{font-size:20px;font-weight:700;margin-bottom:20px;text-align:center}
         .score-row{display:flex;justify-content:space-between;padding:10px 0;font-size:14px;border-bottom:1px solid var(--border)}
@@ -50,9 +39,9 @@
         .redirect-msg{text-align:center;color:var(--text-secondary);font-size:13px;margin-top:12px}
         @media(max-width:768px){.trial-content{flex-direction:column;padding:6px;gap:6px}.trial-panel{flex:1 1 0;min-height:0}.header{padding:8px 12px}.header-title{font-size:14px}.panel-header{padding:6px 12px}.btn{padding:9px 20px;font-size:14px}}
     </style>
-    <link rel="stylesheet" href="first-use.css?v=reference-fade">
+    <link rel="stylesheet" href="first-use.css?v=feedback-card">
     <script defer src="study.js"></script>
-    <script defer src="app.js?v=reference-fade"></script>
+    <script defer src="app.js?v=feedback-card"></script>
 </head>
 <body>
 <div class="header"><div class="header-icon">H</div><div class="header-title">손 동작 CAPTCHA</div></div>
@@ -88,11 +77,12 @@
         <div class="trial-panel">
             <div class="panel-header"><span class="panel-title">내 손</span></div>
             <div class="camera-area"><video id="cameraVideo" playsinline muted autoplay></video></div>
-            <div class="status-bar waiting" id="statusBar">손을 비춰주세요</div>
         </div>
     </div>
     <div class="trial-feedback">
-        <div class="match-indicator waiting" id="matchInd">손을 비춰주세요</div>
+        <div class="trial-status" id="motionStatus" role="status" aria-atomic="true">
+            <div><p id="motionTitle"></p><p id="motionDetail"></p></div>
+        </div>
         <div class="kf-progress" id="kfProgress" role="progressbar" aria-label="동작 진행 단계" aria-valuenow="0"><div class="kf-progress-fill"></div></div>
     </div>
     <div class="trial-actions">

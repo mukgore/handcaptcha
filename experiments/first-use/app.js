@@ -129,10 +129,23 @@ function updateProgress(step) {
     progressBar.setAttribute('aria-valuenow', step);
     progressBar.firstElementChild.style.width = `${step / keyframes.length * 100}%`;
 }
-function updateMatchIndicator(cls, text){
-    const mi=document.getElementById('matchInd'); mi.className='match-indicator '+cls; mi.textContent=text;
+const motionMessages = {
+    waiting: ['자세를 맞춰 주세요', '영상 속 손과 같은 자세를 보여 주세요.'],
+    missing: ['손이 보이지 않아요', '손 전체가 카메라에 보이게 해 주세요.'],
+    loading: ['다음 동작을 준비하고 있어요', ''],
+    playing: ['영상 재생 중', '움직이는 손을 함께 따라 해 주세요.'],
+    matched: ['자세가 맞았어요', ''],
+    complete: ['모든 동작을 완료했어요', '']
+};
+
+function setMotionStatus(state) {
+    const status = byId('motionStatus');
+    if (status.dataset.status === state) return;
+    const [title, detail] = motionMessages[state];
+    status.dataset.status = state;
+    byId('motionTitle').textContent = title;
+    byId('motionDetail').textContent = detail;
 }
-function setS(t,h){ const s=document.getElementById('statusBar'); s.className='status-bar '+t; s.innerHTML=h; }
 
 function onTransitionMatched(){
     segments.push({
@@ -143,8 +156,7 @@ function onTransitionMatched(){
     });
     if(kfIdx >= keyframes.length-1){
         phase = 'done';
-        updateMatchIndicator('matched', '완료');
-        setS('complete', '✅ 모든 동작이 완료되었습니다!');
+        setMotionStatus('complete');
         markStudy('attempt_completed');
         stopCamera();
         setTimeout(showResult, 500);
@@ -659,8 +671,7 @@ async function startChallenge(side) {
         await seekKeyframe(keyframes[0], signal);
         if (signal.aborted) return;
         showTarget(0);
-        setS('waiting', '목표 동작을 따라해주세요');
-        updateMatchIndicator('waiting', '자세를 맞춰주세요');
+        setMotionStatus('waiting');
         requestAnimationFrame(() => {
             if (signal.aborted) return;
             // Reveal and arm the attempt in the rendering callback for this frame.
@@ -706,6 +717,7 @@ async function beginNextTransition() {
     const to = keyframes[kfIdx];
     try {
         if (from.clip.clip_id !== to.clip.clip_id) {
+            setMotionStatus('loading');
             trial.dataset.pending = '';
             await seekKeyframe(to, signal);
             if (signal.aborted) return;
@@ -713,15 +725,13 @@ async function beginNextTransition() {
             delete trial.dataset.pending;
             await afterPaint();
             if (signal.aborted) return;
-            updateMatchIndicator('recording', '자세를 맞춰주세요');
-            setS('recording', '다음 자세로 전환해 주세요');
+            setMotionStatus('waiting');
             beginRecording();
             return;
         }
 
         showTarget(kfIdx);
-        setS('playing', '영상을 보면서 다음 자세를 준비하세요');
-        updateMatchIndicator('playing', '▶ 영상 재생 중...');
+        setMotionStatus('playing');
         await seekKeyframe(from, signal);
         if (signal.aborted) return;
         await withMediaTimeout(rv.play(), signal);
@@ -737,8 +747,7 @@ async function beginNextTransition() {
             if (rv.currentTime >= to.time - .05) {
                 rv.pause();
                 videoPlaying = false;
-                updateMatchIndicator('recording', '자세를 맞춰주세요');
-                setS('recording', '영상이 멈췄습니다. 자세를 따라하세요');
+                setMotionStatus('waiting');
             } else if (rv.error || rv.ended || performance.now() > deadline) {
                 reportFailure('video_play_failed', VIDEO_PLAY_ERROR);
             } else requestAnimationFrame(check);
@@ -767,11 +776,11 @@ function onRes(result, capturedAt) {
     const matched = userLm && angleErr(ppSingle(userLm), ppSingle(targetLm)) < MATCH_ANGLE_THRESH;
     if (!matched) {
         matchHoldStart = null;
-        updateMatchIndicator('waiting', '자세를 맞춰주세요');
+        setMotionStatus(userLm ? 'waiting' : 'missing');
         return;
     }
     matchHoldStart ??= capturedAt;
-    updateMatchIndicator('matched', '자세가 맞습니다');
+    setMotionStatus('matched');
     if (capturedAt - matchHoldStart < MATCH_HOLD_MS) return;
     matchHoldStart = null;
     if (phase === 'matching') beginNextTransition();
