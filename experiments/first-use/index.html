@@ -39,22 +39,16 @@
         .redirect-msg{text-align:center;color:var(--text-secondary);font-size:13px;margin-top:12px}
         @media(max-width:768px){.trial-content{flex-direction:column;padding:6px;gap:6px}.trial-panel{flex:1 1 0;min-height:0}.header{padding:8px 12px}.header-title{font-size:14px}.panel-header{padding:6px 12px}.btn{padding:9px 20px;font-size:14px}}
     </style>
-    <link rel="stylesheet" href="first-use.css?v=progress-attention">
+    <link rel="stylesheet" href="first-use.css?v=intro-illustration">
     <script defer src="study.js"></script>
-    <script defer src="app.js?v=progress-attention"></script>
+    <script defer src="app.js?v=intro-illustration"></script>
 </head>
 <body>
 <div class="header"><div class="header-icon">H</div><div class="header-title">손 동작 CAPTCHA</div></div>
 <main class="screen active" id="screenIntro">
     <h1>영상 속 손동작을 따라 해 주세요.</h1>
-    <div class="demo">
-        <div class="demo-labels"><span>따라 할 영상</span><span>따라 하는 모습</span></div>
-        <video id="demoVideo" muted playsinline loop preload="auto" aria-label="두 손이 같은 방향으로 함께 움직이는 시범"></video>
-        <div id="demoFallback" class="demo-fallback">
-            <figure><div class="demo-still"><img src="palm.svg" alt=""><img src="palm.svg" alt=""></div><figcaption>시작</figcaption></figure>
-            <figure><div class="demo-still shifted"><img src="palm.svg" alt=""><img src="palm.svg" alt=""></div><figcaption>함께 이동한 뒤</figcaption></figure>
-        </div>
-    </div>
+    <img class="intro-illustration" src="intro-illustration.png" width="1536" height="1024"
+        alt="노트북 화면 속 검은 원 밖으로 보이는 손가락 자세를 카메라 앞에서 따라 하는 모습">
     <p id="cameraStatus" role="status"></p>
     <button type="button" class="btn btn-primary" id="cameraButton">카메라 켜고 준비하기</button>
 </main>

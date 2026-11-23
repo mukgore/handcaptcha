@@ -295,8 +295,6 @@ const prepareHint = byId('prepareHint');
 const palmExample = byId('palmExample');
 const palmMask = byId('palmMask');
 const progressBar = byId('kfProgress');
-const demo = byId('demoVideo');
-const demoFallback = byId('demoFallback');
 const MEDIA_TIMEOUT_MS = 12000;
 const HANDS_BASE = 'https://unpkg.com/@mediapipe/hands@0.4.1675469240/';
 let operation = new AbortController();
@@ -305,22 +303,6 @@ let tracking = Promise.resolve();
 let displayMirrored = false;
 let preparationReady = false;
 let trialNumber = 0;
-
-function showDemo() {
-    const fallback = () => {
-        demo.hidden = true;
-        demoFallback.hidden = false;
-    };
-    demo.onerror = fallback;
-    demo.onplaying = () => {
-        if (phase !== 'intro' && phase !== 'connecting') return;
-        demo.hidden = false;
-        demoFallback.hidden = true;
-    };
-    demo.hidden = true;
-    demo.src = 'demo.mp4';
-    demo.play().catch(fallback);
-}
 
 function afterPaint() {
     return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
@@ -476,7 +458,6 @@ async function connectCamera() {
         cv.srcObject = stream;
         await Promise.all([withMediaTimeout(cv.play(), signal), waitForMedia(cv, () => cv.readyState >= 2, signal)]);
         if (signal.aborted) return;
-        demo.pause();
         showPreparation('동작을 준비하는 중…');
         await afterPaint();
         if (signal.aborted) return;
@@ -817,4 +798,3 @@ window.addEventListener('pagehide', () => {
     stopCamera();
 });
 markStudy('intro_shown');
-showDemo();
