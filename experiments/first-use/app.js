@@ -138,13 +138,27 @@ const motionMessages = {
     complete: ['모든 동작을 완료했어요', '']
 };
 
+const PROGRESS_ATTENTION_DELAY_MS = 3000;
+let progressAttentionTimer;
+
+function clearProgressAttention() {
+    clearTimeout(progressAttentionTimer);
+    delete progressBar.dataset.attention;
+}
+
 function setMotionStatus(state) {
     const status = byId('motionStatus');
     if (status.dataset.status === state) return;
+    clearProgressAttention();
     const [title, detail] = motionMessages[state];
     status.dataset.status = state;
     byId('motionTitle').textContent = title;
     byId('motionDetail').textContent = detail;
+    if (state === 'waiting' || state === 'missing') {
+        progressAttentionTimer = setTimeout(() => {
+            if (trial.dataset.stage === 'perform') progressBar.dataset.attention = '';
+        }, PROGRESS_ATTENTION_DELAY_MS);
+    }
 }
 
 function onTransitionMatched(){
@@ -415,6 +429,8 @@ function reportFailure(reason, text, reconnect = false) {
     const started = sessionStart !== null;
     markStudy(started ? 'attempt_incomplete' : 'technical_error', {reason, trial: trialNumber});
     cancelOperation();
+    clearProgressAttention();
+    delete byId('motionStatus').dataset.status;
     rv.pause();
     preparationReady = false;
     resetAttempt();
@@ -797,6 +813,7 @@ rv.addEventListener('error', () => {
 window.addEventListener('pagehide', () => {
     if (sessionStart !== null && phase !== 'done') markStudy('attempt_incomplete', {reason: 'page_left', trial: trialNumber});
     cancelOperation();
+    clearProgressAttention();
     stopCamera();
 });
 markStudy('intro_shown');
