@@ -38,8 +38,8 @@ h1 { font-size: clamp(1.125rem, 3vw, 1.625rem); line-height: 1.4; text-align: ce
 .trial-feedback { display: grid; gap: 10px; padding: 12px 16px; background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); }
 .trial-status { display: flex; align-items: flex-start; gap: 10px; min-height: 40px; color: #1e40af; word-break: keep-all; }
 .trial-status::before { content: ""; flex: 0 0 8px; height: 8px; margin: 7px 3px 0; border-radius: 50%; background: var(--primary); box-shadow: 0 0 0 3px #dbeafe; }
-.trial-status[data-status="missing"] { color: #334155; }
-.trial-status[data-status="missing"]::before { background: #64748b; box-shadow: 0 0 0 3px #e2e8f0; }
+.trial-status:is([data-status="waiting"], [data-status="missing"]) { color: #334155; }
+.trial-status:is([data-status="waiting"], [data-status="missing"])::before { background: #64748b; box-shadow: 0 0 0 3px #e2e8f0; }
 .trial-status[data-status="matched"] { color: #166534; }
 .trial-status[data-status="matched"]::before { background: var(--success); box-shadow: 0 0 0 3px #dcfce7; }
 #motionTitle { font-size: .9375rem; font-weight: 700; line-height: 1.45; }
