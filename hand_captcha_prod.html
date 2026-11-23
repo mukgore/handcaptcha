@@ -120,12 +120,13 @@
     </div>
 </div>
 
+<script src="experiments/first-use/study.js"></script>
 <script>
 // Site root the challenge pool is hosted from. Every pool_manifest.json entry
 // stores its video_file/landmarks_file relative to this same root (see
 // dataset_pipeline/export_pool.py and migrate_legacy_actions.py) -- pointing
 // this at a CDN/bucket instead of GitHub Pages is a pure config change.
-const POOL_BASE = 'https://mukgore.github.io/handcaptcha/';
+const POOL_BASE = firstUseStudy ? new URL('./', location.href).href : 'https://mukgore.github.io/handcaptcha/';
 const MATCH_ANGLE_THRESH = 38;
 // 한 프레임의 우연한 일치로 즉시 통과하지 않도록, 일치 상태가 이 시간 이상
 // 연속 유지되어야 매칭으로 인정한다.
@@ -397,7 +398,11 @@ async function genSequence(){
     if(candidates.length < 2){
         console.error(`Pool has only ${candidates.length} clips total (need >= 2)`);
     }
-    const shuffled = [...candidates].sort(() => Math.random()-0.5);
+    const shuffled = firstUseStudy ? orderFirstUseClips(candidates) : [...candidates].sort(() => Math.random()-0.5);
+    if(firstUseStudy && shuffled.length !== FIRST_USE_CLIPS.length){
+        markStudy('technical_error', {reason:'study_clip_unavailable'});
+        return;
+    }
 
     // manifest에 있어도 landmarks 파일이 서버에 없는(404) 클립이 있을 수 있다.
     // 고정된 2개를 뽑아 실패 시 그대로 죽는 대신, 셔플된 목록을 순회하며
@@ -409,7 +414,11 @@ async function genSequence(){
         const mirror = clip.handedness !== handLabel;
         let d;
         try{ d = await loadClipLandmarks(clip); }
-        catch(e){ console.error(`clip ${clip.clip_id}: landmarks load failed, skipping`, e); continue; }
+        catch(e){
+            console.error(`clip ${clip.clip_id}: landmarks load failed, skipping`, e);
+            if(firstUseStudy) markStudy('technical_error', {reason:'study_landmarks_unavailable'});
+            continue;
+        }
         const {frames: baseLm, origIdx} = getBaseFromLandmarkData(d, mirror);
         if(!baseLm || baseLm.length === 0) continue;
         const info = getInfoFromLandmarkData(d);
@@ -417,7 +426,10 @@ async function genSequence(){
         for(const fi of kfIdxs) keyframes.push({clip, mirror, frameIdx:fi, time:origIdx[fi]/info.fps, baseLm:baseLm[fi], allBaseLm:baseLm, fps:info.fps, width:info.width, height:info.height});
         usedClips++;
     }
-    if(usedClips < 2) console.error(`Only ${usedClips} usable clips loaded (need 2)`);
+    if(usedClips < 2){
+        console.error(`Only ${usedClips} usable clips loaded (need 2)`);
+        if(firstUseStudy) keyframes = [];
+    }
     const prog = document.getElementById('kfProgress');
     prog.innerHTML = keyframes.map((_,i)=>{
         const arrow = i<keyframes.length-1 ? '<span class="kf-arrow">→</span>' : '';
@@ -548,6 +560,21 @@ function showKeyframeImage(idx){
     rv.pause();
     rv.style.transform = kf.mirror ? 'scaleX(-1)' : 'none';
     rv.style.display = 'block'; rc.style.display = 'none';
+    if(firstUseStudy && idx === 0 && !studyProblemMarked){
+        const observe = () => {
+            if(rv.readyState < 2 || rv.seeking || Math.abs(rv.currentTime - kf.time) > .05) return;
+            rv.removeEventListener('seeked', observe);
+            rv.removeEventListener('loadeddata', observe);
+            requestAnimationFrame(() => requestAnimationFrame(() => {
+                if(studyProblemMarked) return;
+                studyProblemMarked = true;
+                markStudy('problem_shown', {clip:kf.clip.clip_id});
+            }));
+        };
+        rv.addEventListener('loadeddata', observe);
+        rv.addEventListener('seeked', observe);
+        requestAnimationFrame(observe);
+    }
     const src = POOL_BASE + kf.clip.video_file;
     if(rv.src !== src){
         rv.src = src;
@@ -642,6 +669,7 @@ function onTransitionMatched(){
     if(kfIdx >= keyframes.length-1){
         document.getElementById('kfd'+kfIdx).className = 'kf-dot done';
         phase = 'done';
+        if(firstUseStudy) markStudy('attempt_completed');
         updateMatchIndicator('matched', '완료');
         setS('complete', '✅ 모든 동작이 완료되었습니다!');
         setTimeout(showResult, 500);
@@ -715,14 +743,19 @@ async function initMP(){
 
 async function initCam(){
     try{
+        if(firstUseStudy) markStudy('camera_requested');
         camStream = await navigator.mediaDevices.getUserMedia({video: {facingMode:'user', width:{ideal:640}, height:{ideal:480}}});
         cv.srcObject = camStream; await cv.play();
         cc.width = cv.videoWidth||640; cc.height = cv.videoHeight||480;
         document.getElementById('cameraPlaceholder').style.display = 'none'; cc.style.display = 'block';
         (async function loop(){ if(cv.readyState>=2) await hands.send({image:cv}); animId = requestAnimationFrame(loop); })();
-    }catch(e){ document.getElementById('cameraPlaceholder').textContent = '카메라 접근이 거부되었습니다.'; }
+    }catch(e){
+        if(firstUseStudy) markStudy('technical_error', {reason:e.name === 'NotAllowedError' ? 'permission_denied' : 'camera_error'});
+        document.getElementById('cameraPlaceholder').textContent = '카메라 접근이 거부되었습니다.';
+    }
 }
 
+let studyPreviewMarked = false, studyProblemMarked = false;
 function onRes(r){
     // 전면 카메라 미리보기는 자연스러운 셀피 반전을 위해 화면에만 좌우 반전 적용
     const videoTrack = camStream ? camStream.getVideoTracks()[0] : null;
@@ -737,6 +770,10 @@ function onRes(r){
     ctx.clearRect(0, 0, cc.width, cc.height);
     if(isFront){ ctx.translate(cc.width, 0); ctx.scale(-1, 1); }
     ctx.drawImage(r.image, 0, 0, cc.width, cc.height);
+    if(firstUseStudy && !studyPreviewMarked){
+        studyPreviewMarked = true;
+        requestAnimationFrame(() => requestAnimationFrame(() => markStudy('camera_preview_shown')));
+    }
     // Framing-guide overlay is drawn here (same mirrored transform as the
     // camera image, before ctx.restore()) so it visually mirrors together
     // with the live feed on front cameras -- see drawFramingGuideOverlay().
@@ -972,6 +1009,7 @@ async function bootstrap(){
     await initCam();
 }
 bootstrap();
+if(firstUseStudy) requestAnimationFrame(() => requestAnimationFrame(() => markStudy('intro_shown')));
 </script>
 </body>
 </html>
