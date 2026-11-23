@@ -26,7 +26,7 @@ h1 { font-size: clamp(1.125rem, 3vw, 1.625rem); line-height: 1.4; text-align: ce
 #palmExample { width: auto; height: 68%; max-width: 75%; object-fit: contain; }
 #screenTrial[data-stage="prepare"] .ref-area { background: #eaf1fb; }
 #screenTrial[data-stage="prepare"] :is(#refVideo, .trial-feedback, #statusBar),
-#screenTrial:not([data-stage="prepare"]) :is(#palmExample, #prepareHint, #startButton) { display: none; }
+#screenTrial:not([data-stage="prepare"]) :is(#palmExample, #prepareHint, #retryButton) { display: none; }
 #screenTrial[data-stage="prepare"] .panel-badge { visibility: hidden; }
 #screenTrial[data-pending] :is(#refVideo, .match-indicator) { visibility: hidden; }
 .trial-actions { display: grid; justify-items: center; text-align: center; gap: 7px; }

@@ -24,8 +24,10 @@ const SAVE_LOCAL_JSON = false;
 // to hands.send(), so the label must be swapped to match the true hand.
 // Re-verify against @mediapipe/hands@0.4.1675469240 on-device before shipping.
 const HANDEDNESS_SWAP = {Left:'right', Right:'left'};
-const HANDEDNESS_COMMIT_N = 8;
 const HANDEDNESS_MIN_SCORE = 0.7;
+const PALM_FACING_MIN = 0.65;
+const PALM_HOLD_MS = 450;
+const PALM_SAMPLE_GAP_MS = 300;
 
 let selectedHand = null;
 const pid = 'user_' + Date.now().toString().slice(-4);
@@ -37,7 +39,7 @@ let phase = 'intro';
 let recStart = null, segments = [], curSegFrames = [];
 let matchHoldStart = null;
 let videoPlaying = false;
-let handednessBuffer = [];
+let palmHold = null;
 let sessionLog = [], sessionStart = null;
 
 const byId = id => document.getElementById(id);
@@ -262,7 +264,7 @@ function sendResult(payload){
 
 const trial = byId('screenTrial');
 const cameraButton = byId('cameraButton');
-const startButton = byId('startButton');
+const retryButton = byId('retryButton');
 const demo = byId('demoVideo');
 const demoFallback = byId('demoFallback');
 const MEDIA_TIMEOUT_MS = 12000;
@@ -357,6 +359,7 @@ function resetAttempt() {
     videoPlaying = false;
     kfIdx = 0;
     selectedHand = null;
+    palmHold = null;
 }
 
 function showPreparation(text = '') {
@@ -365,8 +368,7 @@ function showPreparation(text = '') {
     byId('trialTitle').textContent = '‘내 손’ 화면에 손바닥이 보이게 해 주세요.';
     byId('referenceTitle').textContent = '손바닥 예시';
     byId('trialStatus').textContent = text;
-    startButton.textContent = '동작 시작';
-    startButton.disabled = !preparationReady;
+    retryButton.hidden = true;
     showScr('screenTrial');
 }
 
@@ -387,7 +389,6 @@ function reportFailure(reason, text, reconnect = false) {
     phase = reconnect ? 'camera_error' : 'video_error';
     if (reconnect) {
         stopCamera();
-        handednessBuffer = [];
         byId('cameraStatus').textContent = text;
         cameraButton.textContent = '다시 연결';
         cameraButton.disabled = false;
@@ -395,8 +396,7 @@ function reportFailure(reason, text, reconnect = false) {
         return;
     }
     showPreparation(text);
-    startButton.textContent = '다시 시도';
-    startButton.disabled = false;
+    retryButton.hidden = false;
 }
 
 async function connectCamera() {
@@ -567,6 +567,7 @@ async function prepareChallenge() {
     const signal = cancelOperation();
     phase = 'preparing';
     preparationReady = false;
+    palmHold = null;
     showPreparation('동작을 준비하는 중…');
     const model = Promise.resolve(initTracking()).then(() => {
         if (!signal.aborted) startTracking(camStream);
@@ -590,21 +591,36 @@ async function prepareChallenge() {
     }
 }
 
-function handleHandednessSample(label, score) {
-    const side = HANDEDNESS_SWAP[label];
-    if (!side) {
-        handednessBuffer = [];
-        return;
-    }
-    handednessBuffer.push({side, score: score || 0});
-    if (handednessBuffer.length > HANDEDNESS_COMMIT_N) handednessBuffer.shift();
+function facingPalm(result, aspect) {
+    const handedness = result.multiHandedness?.[0];
+    const side = HANDEDNESS_SWAP[handedness?.label];
+    if (!side || !(handedness.score > HANDEDNESS_MIN_SCORE)) return null;
+    const landmarks = result.multiHandLandmarks?.[0];
+    const wrist = landmarks?.[0], index = landmarks?.[5], pinky = landmarks?.[17];
+    if (!wrist || !index || !pinky) return null;
+    // Raw camera coordinates: x right, y down, z away from the camera.
+    // Normalized x and z use the image width, while normalized y uses height.
+    const ax = index.x - wrist.x, ay = (index.y - wrist.y) * aspect, az = index.z - wrist.z;
+    const bx = pinky.x - wrist.x, by = (pinky.y - wrist.y) * aspect, bz = pinky.z - wrist.z;
+    const nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx;
+    const facing = (side === 'right' ? -nz : nz) / Math.hypot(nx, ny, nz);
+    return facing >= PALM_FACING_MIN ? side : null;
 }
 
-function preparedHand() {
-    const side = handednessBuffer[0]?.side;
-    const average = handednessBuffer.reduce((total, sample) => total + sample.score, 0) / handednessBuffer.length;
-    return handednessBuffer.length === HANDEDNESS_COMMIT_N && average > HANDEDNESS_MIN_SCORE
-        && handednessBuffer.every(sample => sample.side === side) ? side : 'right';
+function observePalm(result, capturedAt) {
+    const side = facingPalm(result, cv.videoHeight / cv.videoWidth);
+    if (!side) {
+        if (palmHold) byId('trialStatus').textContent = '';
+        palmHold = null;
+        return;
+    }
+    if (palmHold?.side !== side || capturedAt - palmHold.last > PALM_SAMPLE_GAP_MS) {
+        palmHold = {side, first: capturedAt, last: capturedAt};
+        byId('trialStatus').textContent = '손바닥 확인 중…';
+        return;
+    }
+    palmHold.last = capturedAt;
+    if (capturedAt - palmHold.first >= PALM_HOLD_MS) startChallenge(side);
 }
 
 function showTarget(index) {
@@ -615,26 +631,17 @@ function showTarget(index) {
     updateDots(index);
 }
 
-async function startChallenge() {
-    if (phase === 'video_error') {
-        await prepareChallenge();
-        return;
-    }
+async function startChallenge(side) {
     if (phase !== 'preparing' || !preparationReady || !camStream) return;
     const {signal} = operation;
     phase = 'starting';
-    startButton.disabled = true;
     byId('trialStatus').textContent = '동작을 준비하는 중…';
     trialNumber++;
-    markStudy('start_clicked', {trial: trialNumber});
-    selectedHand = preparedHand();
+    markStudy('palm_confirmed', {trial: trialNumber});
+    selectedHand = side;
     configureSequence(selectedHand);
     try {
-        // The prod challenge starts at a paused pose. Confirm play permission
-        // while covered, then restore that exact pose before revealing it.
-        await withMediaTimeout(rv.play(), signal);
-        if (signal.aborted) return;
-        markStudy('play_accepted', {trial: trialNumber});
+        // The first prod target is a paused frame. Movement starts after its match.
         await seekKeyframe(keyframes[0], signal);
         if (signal.aborted) return;
         showTarget(0);
@@ -650,7 +657,7 @@ async function startChallenge() {
             phase = 'matching';
         });
     } catch {
-        if (!signal.aborted) reportFailure('video_play_failed', VIDEO_PLAY_ERROR);
+        if (!signal.aborted) reportFailure('video_load_failed', VIDEO_LOAD_ERROR);
     }
 }
 
@@ -707,6 +714,7 @@ async function beginNextTransition() {
         if (signal.aborted) return;
         await withMediaTimeout(rv.play(), signal);
         if (signal.aborted) return;
+        if (from === keyframes[0]) markStudy('play_accepted', {trial: trialNumber});
         await waitForPlaybackFrame(signal);
         if (signal.aborted) return;
         videoPlaying = true;
@@ -731,8 +739,7 @@ async function beginNextTransition() {
 
 function onRes(result, capturedAt) {
     if (phase === 'preparing') {
-        const label = result.multiHandedness?.[0];
-        handleHandednessSample(label?.label, label?.score);
+        if (preparationReady) observePalm(result, capturedAt);
         return;
     }
     if (sessionStart === null || capturedAt < sessionStart || !['matching', 'recording'].includes(phase)) return;
@@ -761,7 +768,9 @@ function onRes(result, capturedAt) {
 }
 
 cameraButton.addEventListener('click', connectCamera);
-startButton.addEventListener('click', startChallenge);
+retryButton.addEventListener('click', () => {
+    if (phase === 'video_error') prepareChallenge();
+});
 rv.addEventListener('error', () => {
     if (phase === 'matching' || phase === 'recording') reportFailure('video_play_failed', VIDEO_PLAY_ERROR);
 });
