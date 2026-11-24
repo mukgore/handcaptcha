@@ -25,7 +25,7 @@ body { height: auto; min-height: 100dvh; overflow: visible; }
 .credits-timeline { margin: 12px 0 0 5px; padding-left: 15px; border-left: 2px solid #dbeafe; list-style: none; }
 .credits-timeline li { position: relative; padding: 7px 10px 14px; }
 .credits-timeline li::before { content: ""; position: absolute; top: 14px; left: -21px; width: 10px; height: 10px; border: 2px solid #93c5fd; border-radius: 50%; background: var(--surface); }
-.credits-timeline time { display: block; margin-bottom: 3px; color: #1e40af; font-size: .8125rem; font-weight: 600; }
+.credits-timeline > li > :is(time, .timeline-range) { display: block; margin-bottom: 3px; color: #1e40af; font-size: .8125rem; font-weight: 600; }
 .timeline-current { border-radius: 10px; background: #eff6ff; }
 .credits-timeline .timeline-current::before { border-color: var(--primary); background: var(--primary); }
 .screen { overflow: visible; }
