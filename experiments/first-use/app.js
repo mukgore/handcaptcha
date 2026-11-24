@@ -44,6 +44,7 @@ let sessionLog = [], sessionStart = null;
 const byId = id => document.getElementById(id);
 const rv = byId('refVideo');
 const cv = byId('cameraVideo');
+const handSelector = new UsabilitySelection.Selector();
 
 // ===== DATA LOADING (manifest-driven challenge pool, spec §0 "챌린지 풀 확장") =====
 // pool_manifest.json only lists clip metadata (clip_id/handedness/paths) --
@@ -495,7 +496,7 @@ async function loadTracker() {
         finally { script.remove(); }
     }
     const tracker = new Hands({locateFile: file => HANDS_BASE + file});
-    tracker.setOptions({maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: .35, minTrackingConfidence: .4});
+    tracker.setOptions({maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: .35, minTrackingConfidence: .4});
     tracker.onResults(result => {
         const frame = trackingFrame;
         if (frame && frame.stream === camStream && tracker === hands) onRes(result, frame.at);
@@ -574,11 +575,12 @@ async function seekKeyframe(kf, signal) {
     await waitForMedia(rv, () => rv.readyState >= 2 && !rv.seeking, signal);
 }
 
-async function prepareChallenge() {
+async function prepareChallenge(hint = PALM_HINT) {
     const signal = cancelOperation();
     phase = 'preparing';
     preparationReady = false;
     palmHold = null;
+    handSelector.reset();
     showPreparation('동작을 준비하는 중…');
     const model = Promise.resolve(initTracking()).then(() => {
         if (!signal.aborted) startTracking(camStream);
@@ -597,16 +599,15 @@ async function prepareChallenge() {
         }
         preparationReady = true;
         showPreparation();
+        prepareHint.textContent = hint;
     } catch {
         if (!signal.aborted) reportFailure('video_load_failed', VIDEO_LOAD_ERROR);
     }
 }
 
-function facingPalm(result, aspect) {
-    const handedness = result.multiHandedness?.[0];
+function facingPalm(landmarks, handedness, aspect) {
     const side = HANDEDNESS_SWAP[handedness?.label];
     if (!side || !(handedness.score > HANDEDNESS_MIN_SCORE)) return null;
-    const landmarks = result.multiHandLandmarks?.[0];
     const wrist = landmarks?.[0], index = landmarks?.[5], pinky = landmarks?.[17];
     if (!wrist || !index || !pinky) return null;
     // Raw camera coordinates: x right, y down, z away from the camera.
@@ -618,16 +619,19 @@ function facingPalm(result, aspect) {
     return facing >= PALM_FACING_MIN ? side : null;
 }
 
-function observePalm(result, capturedAt) {
-    const side = facingPalm(result, cv.videoHeight / cv.videoWidth);
+function observePalm(selection, handedness, capturedAt) {
+    const status = byId('trialStatus');
+    const side = selection.ready ? facingPalm(selection.hand.points, handedness, cv.videoHeight / cv.videoWidth) : null;
     if (!side) {
-        if (palmHold) byId('trialStatus').textContent = '';
         palmHold = null;
+        const hint = selection.reason === 'similar_sizes' ? '따라 할 손 하나를 카메라에 더 가까이 보여 주세요.'
+            : selection.reason === 'stabilizing' ? '손을 고르는 동안 잠시 그대로 있어 주세요.' : '';
+        if (status.textContent !== hint) status.textContent = hint;
         return;
     }
     if (palmHold?.side !== side || capturedAt - palmHold.last > PALM_SAMPLE_GAP_MS) {
         palmHold = {side, first: capturedAt, last: capturedAt};
-        byId('trialStatus').textContent = '손바닥 확인 중…';
+        status.textContent = '손바닥 확인 중…';
         return;
     }
     palmHold.last = capturedAt;
@@ -753,13 +757,32 @@ async function beginNextTransition() {
     }
 }
 
+function isSelectingHand() {
+    return preparationReady && ['preparing', 'starting', 'matching', 'transition', 'recording'].includes(phase);
+}
+
+function restartForHand() {
+    markStudy(sessionStart !== null ? 'attempt_incomplete' : 'hand_selection_reset', {reason: 'tracking_timeout', trial: trialNumber});
+    clearFeedbackAttention();
+    delete byId('motionStatus').dataset.status;
+    rv.pause();
+    resetAttempt();
+    prepareChallenge('따라 하던 손을 놓쳤어요. 다시 손바닥을 보여 주세요.');
+}
+
 function onRes(result, capturedAt) {
+    if (!isSelectingHand()) return;
+    const selection = handSelector.update(result.multiHandLandmarks, capturedAt);
+    if (selection.state === 'lost') {
+        restartForHand();
+        return;
+    }
     if (phase === 'preparing') {
-        if (preparationReady) observePalm(result, capturedAt);
+        observePalm(selection, result.multiHandedness?.[selection.hand?.index], capturedAt);
         return;
     }
     if (sessionStart === null || capturedAt < sessionStart || !['matching', 'recording'].includes(phase)) return;
-    const lm = result.multiHandLandmarks?.[0];
+    const lm = selection.ready ? selection.hand.points : null;
     // Preserve prod's scoring coordinate convention independently of the CSS.
     const userLm = lm?.map(point => [displayMirrored ? 1 - point.x : point.x, point.y, point.z]) || null;
     sessionLog.push({t: capturedAt - sessionStart, phase, detected: Boolean(userLm), lm: userLm});
@@ -796,10 +819,15 @@ retryButton.addEventListener('click', () => {
 rv.addEventListener('error', () => {
     if (phase === 'matching' || phase === 'recording') reportFailure('video_play_failed', VIDEO_PLAY_ERROR);
 });
+const trackingWatchdog = setInterval(() => {
+    if (isSelectingHand() && handSelector.state === 'selected' &&
+        performance.now() - handSelector.lastSeen > UsabilitySelection.DEFAULTS.missingMs) restartForHand();
+}, 100);
 window.addEventListener('pagehide', () => {
     if (sessionStart !== null && phase !== 'done') markStudy('attempt_incomplete', {reason: 'page_left', trial: trialNumber});
     cancelOperation();
     clearFeedbackAttention();
+    clearInterval(trackingWatchdog);
     stopCamera();
 });
 markStudy('intro_shown');

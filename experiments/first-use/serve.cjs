@@ -8,7 +8,7 @@ const port = Number(process.argv[2] || 8765);
 const prefix = 'experiments/first-use/';
 const {clips} = require('../../pool_manifest.json');
 const files = new Set([
-    'hand_captcha_prod.html', 'pool_manifest.json',
+    'hand_captcha_prod.html', 'pool_manifest.json', 'experiments/prod_usability_v5/selector.js',
     ...clips.flatMap(clip => [clip.video_file, clip.landmarks_file]),
     ...['index.html', 'app.js', 'study.js', 'first-use.css', 'palm.svg', 'intro-illustration.png'].map(name => prefix + name)
 ]);
