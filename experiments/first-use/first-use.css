@@ -21,6 +21,7 @@ body { height: auto; min-height: 100dvh; overflow: visible; }
 .credits-guide { margin: 20px 0 24px; padding: 14px; border-radius: var(--radius); background: #eff6ff; }
 .credits-body h3, .credits-timeline h4 { font-size: 1rem; }
 .credits-guide p, .credits-timeline p { margin-top: 5px; color: #475569; font-size: .875rem; line-height: 1.6; }
+.credits-timeline-note { margin-top: 5px; color: #475569; font-size: .8125rem; line-height: 1.6; }
 .credits-timeline { margin: 12px 0 0 5px; padding-left: 15px; border-left: 2px solid #dbeafe; list-style: none; }
 .credits-timeline li { position: relative; padding: 7px 10px 14px; }
 .credits-timeline li::before { content: ""; position: absolute; top: 14px; left: -21px; width: 10px; height: 10px; border: 2px solid #93c5fd; border-radius: 50%; background: var(--surface); }
