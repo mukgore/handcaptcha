@@ -20,7 +20,7 @@ const UPLOAD_URL = ''; // 예: 'https://script.google.com/macros/s/AKfy.../exec'
 // Re-verify against @mediapipe/hands@0.4.1675469240 on-device before shipping.
 const HANDEDNESS_SWAP = {Left:'right', Right:'left'};
 const HANDEDNESS_MIN_SCORE = 0.7;
-const PALM_FACING_MIN = 0.65;
+const HAND_FACING_MIN = 0.65;
 const PALM_HOLD_MS = 450;
 const PALM_SAMPLE_GAP_MS = 300;
 const PALM_EXAMPLE_MS = 1500;
@@ -605,7 +605,7 @@ async function prepareChallenge(hint = PALM_HINT) {
     }
 }
 
-function facingPalm(landmarks, handedness, aspect) {
+function handOrientation(landmarks, handedness, aspect) {
     const side = HANDEDNESS_SWAP[handedness?.label];
     if (!side || !(handedness.score > HANDEDNESS_MIN_SCORE)) return null;
     const wrist = landmarks?.[0], index = landmarks?.[5], pinky = landmarks?.[17];
@@ -616,19 +616,25 @@ function facingPalm(landmarks, handedness, aspect) {
     const bx = pinky.x - wrist.x, by = (pinky.y - wrist.y) * aspect, bz = pinky.z - wrist.z;
     const nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx;
     const facing = (side === 'right' ? -nz : nz) / Math.hypot(nx, ny, nz);
-    return facing >= PALM_FACING_MIN ? side : null;
+    if (facing >= HAND_FACING_MIN) return {side, surface: 'palm'};
+    if (facing <= -HAND_FACING_MIN) return {side, surface: 'back'};
+    return null;
 }
 
 function observePalm(selection, handedness, capturedAt) {
     const status = byId('trialStatus');
-    const side = selection.ready ? facingPalm(selection.hand.points, handedness, cv.videoHeight / cv.videoWidth) : null;
-    if (!side) {
+    const orientation = selection.ready
+        ? handOrientation(selection.hand.points, handedness, cv.videoHeight / cv.videoWidth)
+        : null;
+    if (orientation?.surface !== 'palm') {
         palmHold = null;
-        const hint = selection.reason === 'similar_sizes' ? '따라 할 손 하나를 카메라에 더 가까이 보여 주세요.'
+        const hint = orientation?.surface === 'back' ? '손등이 보여요. 손바닥을 카메라 쪽으로 돌려 주세요.'
+            : selection.reason === 'similar_sizes' ? '따라 할 손 하나를 카메라에 더 가까이 보여 주세요.'
             : selection.reason === 'stabilizing' ? '손을 고르는 동안 잠시 그대로 있어 주세요.' : '';
         if (status.textContent !== hint) status.textContent = hint;
         return;
     }
+    const {side} = orientation;
     if (palmHold?.side !== side || capturedAt - palmHold.last > PALM_SAMPLE_GAP_MS) {
         palmHold = {side, first: capturedAt, last: capturedAt};
         status.textContent = '손바닥 확인 중…';
