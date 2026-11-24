@@ -13,11 +13,6 @@ const LN = ['WRIST','THUMB_CMC','THUMB_MCP','THUMB_IP','THUMB_TIP','INDEX_MCP','
 // 전체 JSON 업로드용 Google Apps Script 웹앱 URL. 비워두면 업로드를 건너뛴다.
 // Apps Script > 배포 > 새 배포 > 웹앱(액세스: 모든 사용자) 의 /exec URL을 넣을 것.
 const UPLOAD_URL = ''; // 예: 'https://script.google.com/macros/s/AKfy.../exec'
-// 결과 JSON을 로컬 파일로도 내려받을지 여부. 자동(스크립트 트리거) 다운로드는
-// 브라우저가 "다른 이름으로 저장" 대화상자를 강제로 띄우는 경우가 있어(특히
-// 전시/키오스크 환경) 매 회차마다 진행을 막을 수 있다. false로 두면 로컬
-// 다운로드를 건너뛴다(UPLOAD_URL 서버 전송은 계속 동작).
-const SAVE_LOCAL_JSON = false;
 
 // MediaPipe Hands labels handedness assuming the input image is already
 // selfie-mirrored. This app always sends the raw (unmirrored) camera frame
@@ -179,7 +174,11 @@ function onTransitionMatched(){
     }
 }
 
-function showScr(id){ document.querySelectorAll('.screen,.trial-container').forEach(s => s.classList.remove('active')); document.getElementById(id).classList.add('active'); }
+function showScr(id) {
+    document.querySelectorAll('.screen,.trial-container').forEach(screen => screen.classList.remove('active'));
+    byId(id).classList.add('active');
+    creditsButton.disabled = id === 'screenTrial';
+}
 
 // ===== METRICS =====
 function pp(f){ if(!f||f.length<3)return null; return f.map(fr=>{ const w=fr[0],n=fr.map(p=>[p[0]-w[0],p[1]-w[1]]); const dx=n[9][0],dy=n[9][1],h=Math.max(Math.sqrt(dx*dx+dy*dy),1e-6); return n.map(p=>[p[0]/h,p[1]/h]); }); }
@@ -249,26 +248,22 @@ function showResult(){
         sessionLog
     };
 
-    if(SAVE_LOCAL_JSON){
-        const blob = new Blob([JSON.stringify(result, null, 2)], {type: 'application/json'});
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `hand_captcha_${selectedHand}_${pid}_${Date.now()}.json`;
-        a.click();
-        URL.revokeObjectURL(url);
-    }
-
+    byId('downloadResult').onclick = () => downloadResultFile(result);
     showScr('screenResult');
-
-    // 업로드는 백그라운드 best-effort -- 완료를 기다리지 않는다. sendBeacon/keepalive
-    // fetch 모두 페이로드 상한(브라우저별 대략 64KB)이 있어 그보다 큰 세션 로그는
-    // 끊길 수 있다 -- 그래서 로컬 다운로드를 항상 백업으로 남긴다.
     sendResult(JSON.stringify(result));
+}
 
-    // 설문으로 이동하는 대신, 결과를 잠시 보여준 뒤 CAPTCHA 시작 화면으로 되돌아간다.
-    document.getElementById('redirectMsg').textContent = '잠시 후 CAPTCHA를 다시 시작합니다...';
-    setTimeout(() => location.reload(), 3000);
+function downloadResultFile(result) {
+    const {selectedHand, participantId, timestamp} = result.experimentInfo;
+    const blob = new Blob([JSON.stringify(result, null, 2)], {type: 'application/json'});
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `hand_captcha_${selectedHand}_${participantId}_${timestamp}.json`;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 // 결과 JSON을 서버로 전송(설정된 경우). sendBeacon 우선, 실패 시(주로 페이로드가
@@ -289,6 +284,8 @@ function sendResult(payload){
 }
 
 const trial = byId('screenTrial');
+const creditsButton = byId('creditsButton');
+const creditsDialog = byId('creditsDialog');
 const cameraButton = byId('cameraButton');
 const retryButton = byId('retryButton');
 const prepareHint = byId('prepareHint');
@@ -786,6 +783,13 @@ function onRes(result, capturedAt) {
 }
 
 cameraButton.addEventListener('click', connectCamera);
+creditsButton.addEventListener('click', () => {
+    creditsDialog.showModal();
+    creditsDialog.scrollTop = 0;
+});
+creditsDialog.addEventListener('click', event => {
+    if (event.target === creditsDialog) creditsDialog.close();
+});
 retryButton.addEventListener('click', () => {
     if (phase === 'video_error') prepareChallenge();
 });

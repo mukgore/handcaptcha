@@ -35,16 +35,74 @@
         .verdict{text-align:center;padding:20px;margin-top:16px;border-radius:10px;font-size:18px;font-weight:700}
         .verdict.pass{background:#dcfce7;color:#166534;border:1px solid #bbf7d0}
         .verdict.fail{background:#fee2e2;color:#991b1b;border:1px solid #fecaca}
-        .btn-row{display:flex;gap:10px;justify-content:center;margin-top:20px}
-        .redirect-msg{text-align:center;color:var(--text-secondary);font-size:13px;margin-top:12px}
+        .btn-row{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:20px}
         @media(max-width:768px){.trial-content{flex-direction:column;padding:6px;gap:6px}.trial-panel{flex:1 1 0;min-height:0}.header{padding:8px 12px}.header-title{font-size:14px}.panel-header{padding:6px 12px}.btn{padding:9px 20px;font-size:14px}}
     </style>
-    <link rel="stylesheet" href="first-use.css?v=intro-privacy">
+    <link rel="stylesheet" href="first-use.css?v=development-timeline">
     <script defer src="study.js"></script>
-    <script defer src="app.js?v=feedback-attention"></script>
+    <script defer src="app.js?v=development-timeline"></script>
 </head>
 <body>
-<div class="header"><div class="header-icon">H</div><div class="header-title">손 동작 CAPTCHA</div></div>
+<header class="header">
+    <button type="button" class="header-icon" id="creditsButton" aria-label="제작 정보 열기" aria-haspopup="dialog" aria-controls="creditsDialog" title="제작 정보">H</button>
+    <div class="header-title">손 동작 CAPTCHA</div>
+</header>
+<dialog class="credits-dialog" id="creditsDialog" aria-labelledby="creditsTitle">
+    <div class="credits-content">
+        <div class="credits-heading">
+            <h2 id="creditsTitle">제작 정보</h2>
+            <form method="dialog"><button type="submit" class="credits-close" aria-label="제작 정보 닫기" autofocus>×</button></form>
+        </div>
+        <div class="credits-body">
+            <p class="credits-project">손 동작 CAPTCHA</p>
+            <p class="credits-copyright">© 2026 조영준</p>
+            <section class="credits-guide" aria-labelledby="creditsGuideTitle">
+                <h3 id="creditsGuideTitle">지금 버전 해보기</h3>
+                <p><strong>카메라 켜고 준비하기</strong>를 누르고 손바닥을 보여 주세요. 문제가 나오면 검은 원 밖에 보이는 손가락을 보고 움직임을 따라 하세요.</p>
+            </section>
+            <section aria-labelledby="timelineTitle">
+                <h3 id="timelineTitle">개발 타임라인</h3>
+                <ol class="credits-timeline" role="list">
+                    <li>
+                        <time datetime="2026-02-22">2026년 2월 22일</time>
+                        <h4>손을 알아보는 첫 실험</h4>
+                        <p>손동작 영상과 카메라 속 손을 알아보는 실험을 처음 올렸어요. 손으로 풀 수 있는 문제의 시작이었어요.</p>
+                    </li>
+                    <li>
+                        <time datetime="2026-03-29">2026년 3월 29일</time>
+                        <h4>손동작을 따라 하는 문제</h4>
+                        <p>화면에 나온 손동작을 따라 하는 여러 버전을 시험했어요. 손바닥을 검은 원으로 가려도 보이는 손가락으로 동작을 짐작할 수 있게 했어요.</p>
+                    </li>
+                    <li>
+                        <time datetime="2026-07-13">2026년 7월 13일</time>
+                        <h4>따라 하고 점수를 보는 공개 버전</h4>
+                        <p>‘prod’라는 이름으로 실행 화면을 올렸어요. 영상 속 자세와 내 손이 얼마나 비슷한지 살피고, 마지막에 점수를 보여 줬어요.</p>
+                    </li>
+                    <li>
+                        <time datetime="2026-09-13">2026년 9월 13일</time>
+                        <h4>전시에서 여러 사람이 해볼 수 있게</h4>
+                        <p>한 사람이 끝내면 다음 사람이 바로 해볼 수 있도록 결과 화면에서 잠시 뒤 첫 화면으로 돌아가게 했어요.</p>
+                    </li>
+                    <li>
+                        <time datetime="2026-11-18">2026년 11월 18일</time>
+                        <h4>내 손이 화면에 더 잘 보이게</h4>
+                        <p>문제 영상과 내 손 화면을 보기 좋게 정리했어요. 손을 접거나 돌릴 때도 카메라가 같은 손을 잘 따라가도록 고쳤어요.</p>
+                    </li>
+                    <li>
+                        <time datetime="2026-11-23">2026년 11월 23일</time>
+                        <h4>손바닥을 보여 주면 자동으로 시작</h4>
+                        <p>새 B 화면에 손바닥 예시를 넣었어요. 손바닥을 카메라에 보여 주면 검은 원과 따라 하는 방법을 먼저 알려 줘요.</p>
+                    </li>
+                    <li class="timeline-current">
+                        <time datetime="2026-11-24">2026년 11월 24일</time>
+                        <h4>지금의 B 화면</h4>
+                        <p>파란 막대로 얼마나 진행했는지 볼 수 있어요. 끝나면 결과를 마음껏 살펴보고 파일로 받을 수 있어요. 다시 하고 싶을 때 <strong>다시 시작하기</strong>를 누르면 돼요.</p>
+                    </li>
+                </ol>
+            </section>
+        </div>
+    </div>
+</dialog>
 <main class="screen active" id="screenIntro">
     <h1>영상 속 손동작을 따라 해 주세요.</h1>
     <img class="intro-illustration" src="intro-illustration.png" width="1536" height="1024"
@@ -103,9 +161,9 @@
         <div class="score-row"><span class="label">관절 (×0.25)</span><span class="value" id="resAngle">-</span></div>
         <div class="score-final"><span>최종 CAPTCHA 점수</span><span id="resFinal">-</span></div>
         <div class="verdict" id="verdict"></div>
-        <div class="redirect-msg" id="redirectMsg"></div>
         <div class="btn-row">
-            <button class="btn btn-primary btn-lg" onclick="location.reload()">다시 시작하기</button>
+            <button type="button" class="btn btn-primary" onclick="location.reload()">다시 시작하기</button>
+            <button type="button" class="btn btn-secondary" id="downloadResult">결과 데이터 다운로드</button>
         </div>
     </div>
 </div>
