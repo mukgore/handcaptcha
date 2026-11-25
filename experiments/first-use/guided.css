@@ -56,16 +56,7 @@ html[data-guide] {
     box-shadow: var(--shadow);
 }
 
-.intro-visual {
-    display: grid;
-    place-items: center;
-    height: clamp(122px, 28dvh, 245px);
-    overflow: hidden;
-}
-.palm-visual { background: #e4efff; }
-.palm-visual img { width: auto; height: 69%; }
-.covered-visual { background: #a4a5a0; }
-.covered-visual img { width: auto; height: 100%; max-width: 100%; object-fit: contain; }
+:where(html[data-guide]) .intro-illustration { width: min(100%, 500px); }
 .intro-step-text { padding: 14px 18px 16px; }
 .intro-step-text h2 { font-size: 1.05rem; letter-spacing: -.035em; }
 .intro-step-text p { margin-top: 4px; color: var(--text-secondary); font-size: .875rem; }
