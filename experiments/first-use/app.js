@@ -42,6 +42,7 @@ let palmHold = null;
 let sessionLog = [], sessionStart = null;
 
 const byId = id => document.getElementById(id);
+const guided = document.documentElement.dataset.guide === 'guided-v1';
 const rv = byId('refVideo');
 const cv = byId('cameraVideo');
 const handSelector = new UsabilitySelection.Selector();
@@ -133,6 +134,14 @@ const motionMessages = {
     matched: ['자세가 맞았어요', ''],
     complete: ['모든 동작을 완료했어요', '']
 };
+const guidedMotionMessages = {
+    waiting: ['멈춘 자세를 맞춰 주세요', '검은 원 밖 손가락을 보고 같은 모양을 만든 뒤 잠깐 유지하세요.'],
+    missing: ['손을 다시 보여 주세요', '손목과 손끝이 모두 ‘내 손’ 화면 안에 들어오게 해 주세요.'],
+    loading: ['다음 동작을 불러오는 중이에요', '같은 손을 카메라에 보여 주세요.'],
+    playing: ['영상과 함께 움직이세요', '‘따라 할 손’의 손가락이 움직이는 대로 따라 하세요.'],
+    matched: ['자세가 맞았어요', '그대로 잠깐 유지하세요.'],
+    complete: ['모든 동작을 완료했어요', '결과를 준비하고 있어요.']
+};
 
 const FEEDBACK_ATTENTION_DELAY_MS = 3000;
 let feedbackAttentionTimer;
@@ -146,11 +155,11 @@ function setMotionStatus(state) {
     const status = byId('motionStatus');
     if (status.dataset.status === state) return;
     clearFeedbackAttention();
-    const [title, detail] = motionMessages[state];
+    const [title, detail] = (guided ? guidedMotionMessages : motionMessages)[state];
     status.dataset.status = state;
     byId('motionTitle').textContent = title;
     byId('motionDetail').textContent = detail;
-    if (state === 'waiting' || state === 'missing') {
+    if (!guided && (state === 'waiting' || state === 'missing')) {
         feedbackAttentionTimer = setTimeout(() => {
             if (trial.dataset.stage === 'perform') feedbackCard.dataset.attention = '';
         }, FEEDBACK_ATTENTION_DELAY_MS);
@@ -166,6 +175,7 @@ function onTransitionMatched(){
     });
     if(kfIdx >= keyframes.length-1){
         phase = 'done';
+        if (guided) updateProgress(keyframes.length);
         setMotionStatus('complete');
         markStudy('attempt_completed');
         stopCamera();
@@ -179,6 +189,7 @@ function showScr(id) {
     document.querySelectorAll('.screen,.trial-container').forEach(screen => screen.classList.remove('active'));
     byId(id).classList.add('active');
     creditsButton.disabled = id === 'screenTrial';
+    stopCameraButton.hidden = !guided || id !== 'screenTrial';
 }
 
 // ===== METRICS =====
@@ -227,8 +238,16 @@ function showResult(){
         v.textContent = `❌ 차단 (${s.captcha.toFixed(3)} < ${THRESHOLD})`;
     }
 
+    if (guided) {
+        byId('resultTitle').textContent = '손동작 완료';
+        v.textContent = s.captcha >= THRESHOLD ? '인증 통과' : '인증 기준 미달';
+        byId('guideResultDetails').append(byId('resultMetrics'));
+    }
     const result = {
-        experimentInfo: {participantId: pid, selectedHand, timestamp: Date.now(), version: 'prod_v2_pool_first_use'},
+        experimentInfo: {
+            participantId: pid, selectedHand, timestamp: Date.now(), version: 'prod_v2_pool_first_use',
+            ...(guided ? {uiVariant: 'guided-v1'} : {})
+        },
         keyframes: keyframes.map(kf => ({clip: kf.clip.clip_id, frameIdx: kf.frameIdx})),
         segments: segments.map(seg => ({
             fromKf: seg.fromKf, toKf: seg.toKf,
@@ -251,6 +270,7 @@ function showResult(){
 
     byId('downloadResult').onclick = () => downloadResultFile(result);
     showScr('screenResult');
+    if (guided) byId('resultTitle').focus();
     sendResult(JSON.stringify(result));
 }
 
@@ -288,12 +308,26 @@ const trial = byId('screenTrial');
 const creditsButton = byId('creditsButton');
 const creditsDialog = byId('creditsDialog');
 const cameraButton = byId('cameraButton');
+const stopCameraButton = byId('stopCameraButton');
 const retryButton = byId('retryButton');
 const prepareHint = byId('prepareHint');
 const palmExample = byId('palmExample');
 const palmMask = byId('palmMask');
 const feedbackCard = byId('trialFeedback');
 const progressBar = byId('kfProgress');
+const guideStart = byId('guideStart');
+const guidePrepStatus = byId('guidePrepStatus');
+const guidedPrepMessages = {
+    loading: ['카메라가 연결됐어요', '손을 인식할 준비를 하고 있어요.'],
+    placement: ['손 전체를 화면 가운데에 보여 주세요', '손목과 손끝이 모두 보이도록 편한 손 하나를 들어 주세요.'],
+    similar: ['손 하나만 보여 주세요', '따라 할 손을 남겨 두고 다른 손을 내려 주세요.'],
+    stabilizing: ['손을 확인하고 있어요', '지금 위치에 잠깐 그대로 있어 주세요.'],
+    back: ['손등이 보여요', '손바닥이 렌즈를 향하도록 손을 돌려 주세요.'],
+    unclear: ['손바닥이 렌즈를 향하게 해 주세요', '‘내 손’ 화면에 손금이 보이도록 손을 활짝 펴 주세요.'],
+    confirming: ['손바닥을 확인 중이에요', '손바닥이 보이도록 잠시 유지해 주세요.'],
+    ready: ['손바닥이 잘 보여요', '검은 원 밖의 손가락을 보고 따라 하세요. 준비되면 시작을 눌러 주세요.'],
+    starting: ['첫 자세를 불러오는 중이에요', '손을 카메라 앞에 두고 기다려 주세요.']
+};
 const MEDIA_TIMEOUT_MS = 12000;
 const HANDS_BASE = 'https://unpkg.com/@mediapipe/hands@0.4.1675469240/';
 let operation = new AbortController();
@@ -302,6 +336,15 @@ let tracking = Promise.resolve();
 let displayMirrored = false;
 let preparationReady = false;
 let trialNumber = 0;
+let guideStartRequested = false;
+
+function setGuidePrepStatus(state) {
+    if (guidePrepStatus.dataset.status === state) return;
+    const [title, detail] = guidedPrepMessages[state];
+    guidePrepStatus.dataset.status = state;
+    byId('guidePrepTitle').textContent = title;
+    byId('guidePrepDetail').textContent = detail;
+}
 
 function afterPaint() {
     return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
@@ -386,16 +429,29 @@ function resetAttempt() {
 }
 
 function showPreparation(text = '') {
+    const entering = !trial.classList.contains('active') || trial.dataset.stage !== 'prepare';
     trial.dataset.stage = 'prepare';
     delete trial.dataset.pending;
     delete trial.dataset.masked;
+    delete trial.dataset.retry;
     palmExample.removeAttribute('aria-hidden');
     prepareHint.textContent = PALM_HINT;
     byId('trialTitle').textContent = '‘내 손’ 화면에 손바닥이 보이게 해 주세요.';
     byId('referenceTitle').textContent = '손바닥 예시';
     byId('trialStatus').textContent = text;
     retryButton.hidden = true;
+    if (guided) {
+        byId('guideStep').textContent = '1 / 2 · 카메라에 손 보여 주기';
+        byId('trialTitle').textContent = '손바닥을 카메라 렌즈 쪽으로';
+        byId('guideLead').textContent = '인사하듯 손을 펴세요. ‘내 손’ 화면에 손금이 보이면 돼요.';
+        guideStartRequested = false;
+        guideStart.hidden = false;
+        guideStart.disabled = !preparationReady;
+        byId('guideArmedHint').hidden = true;
+        setGuidePrepStatus(preparationReady ? 'placement' : 'loading');
+    }
     showScr('screenTrial');
+    if (guided && entering) byId('trialTitle').focus();
 }
 
 function showChallenge() {
@@ -404,6 +460,13 @@ function showChallenge() {
     byId('trialTitle').textContent = '영상이 움직이면 함께 따라 해 주세요.';
     byId('referenceTitle').textContent = '따라 할 동작';
     byId('trialStatus').textContent = '';
+    if (guided) {
+        byId('guideStep').textContent = '2 / 2 · 영상 따라 하기';
+        byId('trialTitle').textContent = '영상 속 손을 따라 하세요';
+        byId('guideLead').textContent = '멈추면 자세를 맞추고, 움직이면 같이 움직이세요.';
+        byId('referenceTitle').textContent = '따라 할 손';
+        byId('trialTitle').focus();
+    }
 }
 
 function reportFailure(reason, text, reconnect = false) {
@@ -422,10 +485,15 @@ function reportFailure(reason, text, reconnect = false) {
         cameraButton.textContent = '다시 연결';
         cameraButton.disabled = false;
         showScr('screenIntro');
+        if (guided) cameraButton.focus();
         return;
     }
     showPreparation(text);
     retryButton.hidden = false;
+    if (guided) {
+        trial.dataset.retry = '';
+        retryButton.focus();
+    }
 }
 
 async function connectCamera() {
@@ -465,8 +533,10 @@ async function connectCamera() {
     } catch (error) {
         if (signal.aborted) return;
         const denied = error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError';
-        reportFailure(denied ? 'permission_denied' : 'camera_error',
-            denied ? '브라우저에서 카메라를 허용해 주세요.' : CAMERA_ERROR, true);
+        const permissionHint = guided
+            ? '주소창의 사이트 설정에서 카메라를 허용한 뒤 다시 연결해 주세요.'
+            : '브라우저에서 카메라를 허용해 주세요.';
+        reportFailure(denied ? 'permission_denied' : 'camera_error', denied ? permissionHint : CAMERA_ERROR, true);
     }
 }
 
@@ -599,7 +669,8 @@ async function prepareChallenge(hint = PALM_HINT) {
         }
         preparationReady = true;
         showPreparation();
-        prepareHint.textContent = hint;
+        if (guided && hint !== PALM_HINT) byId('trialStatus').textContent = hint;
+        else prepareHint.textContent = hint;
     } catch {
         if (!signal.aborted) reportFailure('video_load_failed', VIDEO_LOAD_ERROR);
     }
@@ -626,6 +697,10 @@ function observePalm(selection, handedness, capturedAt) {
     const orientation = selection.ready
         ? handOrientation(selection.hand.points, handedness, cv.videoHeight / cv.videoWidth)
         : null;
+    if (guided) {
+        observeGuidedPalm(selection, orientation, capturedAt);
+        return;
+    }
     if (orientation?.surface !== 'palm') {
         palmHold = null;
         const hint = orientation?.surface === 'back' ? '손등이 보여요. 손바닥을 카메라 쪽으로 돌려 주세요.'
@@ -644,12 +719,42 @@ function observePalm(selection, handedness, capturedAt) {
     if (capturedAt - palmHold.first >= PALM_HOLD_MS) startChallenge(side);
 }
 
+function observeGuidedPalm(selection, orientation, capturedAt) {
+    if (orientation?.surface !== 'palm') {
+        palmHold = null;
+        const state = orientation?.surface === 'back' ? 'back'
+            : selection.ready ? 'unclear'
+            : selection.reason === 'similar_sizes' ? 'similar'
+            : selection.reason === 'stabilizing' ? 'stabilizing' : 'placement';
+        setGuidePrepStatus(state);
+        return;
+    }
+
+    const {side} = orientation;
+    if (palmHold?.side !== side || capturedAt - palmHold.last > PALM_SAMPLE_GAP_MS) {
+        palmHold = {side, first: capturedAt, last: capturedAt};
+        setGuidePrepStatus('confirming');
+        return;
+    }
+    palmHold.last = capturedAt;
+    if (palmHold.confirmed || capturedAt - palmHold.first < PALM_HOLD_MS) return;
+    palmHold.confirmed = true;
+    byId('trialStatus').textContent = '';
+    setGuidePrepStatus('ready');
+    markStudy('palm_ready', {trial: trialNumber + 1});
+    trial.dataset.masked = '';
+    if (guideStartRequested) startChallenge(side);
+}
+
 function showTarget(index) {
     const kf = keyframes[index];
     targetLm = kf.baseLm;
-    rv.style.transform = kf.mirror ? 'scaleX(-1)' : 'none';
+    // The pool's Right clips show the thumb on the viewer's left at the start,
+    // which is the mirrored view of a right palm. Match the preview's view.
+    const mirrorReference = guided && !displayMirrored ? !kf.mirror : kf.mirror;
+    rv.style.transform = mirrorReference ? 'scaleX(-1)' : 'none';
     byId('kfLabel').textContent = `자세 ${index + 1}/${keyframes.length}`;
-    updateProgress(index + 1);
+    updateProgress(guided ? index : index + 1);
 }
 
 async function startChallenge(side) {
@@ -663,15 +768,21 @@ async function startChallenge(side) {
     selectedHand = side;
     configureSequence(selectedHand);
     try {
-        await waitForGuide(PALM_EXAMPLE_MS, signal);
-        if (signal.aborted) return;
-        trial.dataset.masked = '';
-        await Promise.allSettled(palmMask.getAnimations().map(animation => animation.finished));
-        if (signal.aborted) return;
-        prepareHint.textContent = MASK_HINT;
-        markStudy('mask_instruction_shown', {trial: trialNumber});
-        await waitForGuide(MASK_INSTRUCTION_MS, signal);
-        if (signal.aborted) return;
+        if (guided) {
+            setGuidePrepStatus('starting');
+            guideStart.disabled = true;
+            byId('guideArmedHint').hidden = true;
+        } else {
+            await waitForGuide(PALM_EXAMPLE_MS, signal);
+            if (signal.aborted) return;
+            trial.dataset.masked = '';
+            await Promise.allSettled(palmMask.getAnimations().map(animation => animation.finished));
+            if (signal.aborted) return;
+            prepareHint.textContent = MASK_HINT;
+            markStudy('mask_instruction_shown', {trial: trialNumber});
+            await waitForGuide(MASK_INSTRUCTION_MS, signal);
+            if (signal.aborted) return;
+        }
         // The first prod target is a paused frame. Movement starts after its match.
         await seekKeyframe(keyframes[0], signal);
         if (signal.aborted) return;
@@ -736,7 +847,7 @@ async function beginNextTransition() {
         }
 
         showTarget(kfIdx);
-        setMotionStatus('playing');
+        if (!guided) setMotionStatus('playing');
         await seekKeyframe(from, signal);
         if (signal.aborted) return;
         await withMediaTimeout(rv.play(), signal);
@@ -744,6 +855,7 @@ async function beginNextTransition() {
         if (from === keyframes[0]) markStudy('play_accepted', {trial: trialNumber});
         await waitForPlaybackFrame(signal);
         if (signal.aborted) return;
+        if (guided) setMotionStatus('playing');
         videoPlaying = true;
         beginRecording();
         const deadline = recStart + (to.time - from.time) * 1000 + 3000;
@@ -812,6 +924,39 @@ function onRes(result, capturedAt) {
 }
 
 cameraButton.addEventListener('click', connectCamera);
+guideStart.addEventListener('click', () => {
+    if (!guided || phase !== 'preparing' || guideStart.disabled || guideStartRequested) return;
+    guideStartRequested = true;
+    guideStart.hidden = true;
+    byId('guideArmedHint').hidden = false;
+    byId('trialTitle').focus();
+    markStudy('guide_start_pressed', {trial: trialNumber + 1});
+    if (palmHold?.confirmed && performance.now() - palmHold.last <= PALM_SAMPLE_GAP_MS) {
+        startChallenge(palmHold.side);
+    } else {
+        palmHold = null;
+        setGuidePrepStatus('placement');
+    }
+});
+stopCameraButton.addEventListener('click', () => {
+    if (phase === 'done') return;
+    markStudy(sessionStart !== null ? 'attempt_incomplete' : 'guide_cancelled', {
+        reason: 'user_stopped_camera', trial: trialNumber
+    });
+    cancelOperation();
+    clearFeedbackAttention();
+    delete byId('motionStatus').dataset.status;
+    rv.pause();
+    stopCamera();
+    preparationReady = false;
+    resetAttempt();
+    phase = 'intro';
+    byId('cameraStatus').textContent = '카메라를 껐어요.';
+    cameraButton.textContent = '카메라 켜고 준비하기';
+    cameraButton.disabled = false;
+    showScr('screenIntro');
+    cameraButton.focus();
+});
 creditsButton.addEventListener('click', () => {
     creditsDialog.showModal();
     creditsDialog.scrollTop = 0;
@@ -836,4 +981,4 @@ window.addEventListener('pagehide', () => {
     clearInterval(trackingWatchdog);
     stopCamera();
 });
-markStudy('intro_shown');
+markStudy('intro_shown', guided ? {uiVariant: 'guided-v1'} : {});

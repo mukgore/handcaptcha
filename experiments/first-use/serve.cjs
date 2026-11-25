@@ -10,12 +10,12 @@ const {clips} = require('../../pool_manifest.json');
 const files = new Set([
     'hand_captcha_prod.html', 'pool_manifest.json', 'experiments/prod_usability_v5/selector.js',
     ...clips.flatMap(clip => [clip.video_file, clip.landmarks_file]),
-    ...['index.html', 'app.js', 'study.js', 'first-use.css', 'palm.svg', 'intro-illustration.png'].map(name => prefix + name)
+    ...['index.html', 'app.js', 'study.js', 'first-use.css', 'guided.css', 'palm.svg', 'intro-illustration.png', 'covered-hand.webp'].map(name => prefix + name)
 ]);
 const types = {
     '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8',
     '.js': 'text/javascript; charset=utf-8', '.json': 'application/json',
-    '.svg': 'image/svg+xml', '.mp4': 'video/mp4', '.png': 'image/png'
+    '.svg': 'image/svg+xml', '.mp4': 'video/mp4', '.png': 'image/png', '.webp': 'image/webp'
 };
 
 createServer(async (req, res) => {

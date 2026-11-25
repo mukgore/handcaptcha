@@ -4,6 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>손 동작 CAPTCHA</title>
+    <script>
+        if (new URLSearchParams(location.search).get('ui') === 'guided-v1') {
+            document.documentElement.dataset.guide = 'guided-v1';
+        }
+    </script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
     <style>
         *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
@@ -38,10 +43,11 @@
         .btn-row{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:20px}
         @media(max-width:768px){.trial-content{flex-direction:column;padding:6px;gap:6px}.trial-panel{flex:1 1 0;min-height:0}.header{padding:8px 12px}.header-title{font-size:14px}.panel-header{padding:6px 12px}.btn{padding:9px 20px;font-size:14px}}
     </style>
-    <link rel="stylesheet" href="first-use.css?v=hand-back-guidance">
+    <link rel="stylesheet" href="first-use.css?v=guided-v1">
+    <link rel="stylesheet" href="guided.css?v=guided-v1">
     <script defer src="study.js"></script>
     <script defer src="../prod_usability_v5/selector.js"></script>
-    <script defer src="app.js?v=hand-back-guidance"></script>
+    <script defer src="app.js?v=guided-v1"></script>
 </head>
 <body>
 <header class="header">
@@ -51,6 +57,7 @@
         </svg>
     </button>
     <div class="header-title">손 동작 CAPTCHA</div>
+    <button type="button" class="guided-only btn btn-secondary" id="stopCameraButton" hidden>카메라 끄기</button>
 </header>
 <dialog class="credits-dialog" id="creditsDialog" aria-labelledby="creditsTitle">
     <div class="credits-content">
@@ -116,8 +123,24 @@
 </dialog>
 <main class="screen active" id="screenIntro">
     <h1>영상 속 손동작을 따라 해 주세요.</h1>
-    <img class="intro-illustration" src="intro-illustration.png" width="1536" height="1024"
+    <img class="intro-illustration legacy-only" src="intro-illustration.png" width="1536" height="1024"
         alt="노트북 화면 속 검은 원 밖으로 보이는 손가락 자세를 카메라 앞에서 따라 하는 모습">
+    <ol class="guided-only intro-steps" role="list">
+        <li>
+            <div class="intro-visual palm-visual"><img src="palm.svg" width="84" height="104" alt="손금이 보이는 펼친 손"></div>
+            <div class="intro-step-text">
+                <h2>손바닥을 렌즈 쪽으로</h2>
+                <p>인사하듯 편한 손 하나를 펴서 카메라에 보여 주세요.</p>
+            </div>
+        </li>
+        <li>
+            <div class="intro-visual covered-visual"><img src="covered-hand.webp" width="480" height="480" alt="검은 원 밖으로 손가락 끝이 보이는 손"></div>
+            <div class="intro-step-text">
+                <h2>보이는 손가락을 따라</h2>
+                <p>멈춘 자세를 먼저 맞추고, 영상이 움직이면 함께 움직이세요.</p>
+            </div>
+        </li>
+    </ol>
     <p id="cameraStatus" role="status"></p>
     <button type="button" class="btn btn-primary" id="cameraButton">카메라 켜고 준비하기</button>
     <p class="intro-privacy">
@@ -130,7 +153,11 @@
 </main>
 
 <main class="trial-container" id="screenTrial" data-stage="prepare">
-    <h1 id="trialTitle">‘내 손’ 화면에 손바닥이 보이게 해 주세요.</h1>
+    <div class="trial-heading">
+        <p class="guided-only" id="guideStep"></p>
+        <h1 id="trialTitle" tabindex="-1">‘내 손’ 화면에 손바닥이 보이게 해 주세요.</h1>
+        <p class="guided-only" id="guideLead"></p>
+    </div>
     <div class="trial-content">
         <div class="trial-panel">
             <div class="panel-header"><span class="panel-title" id="referenceTitle">손바닥 예시</span><span class="panel-badge" id="kfLabel">준비 중</span></div>
@@ -146,7 +173,10 @@
         </div>
         <div class="trial-panel">
             <div class="panel-header"><span class="panel-title">내 손</span></div>
-            <div class="camera-area"><video id="cameraVideo" playsinline muted autoplay></video></div>
+            <div class="camera-area">
+                <video id="cameraVideo" playsinline muted autoplay></video>
+                <div class="guided-only camera-frame" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+            </div>
         </div>
     </div>
     <div class="trial-feedback" id="trialFeedback">
@@ -156,7 +186,15 @@
         <div class="kf-progress" id="kfProgress" role="progressbar" aria-label="동작 진행 단계" aria-valuenow="0"><div class="kf-progress-fill"></div></div>
     </div>
     <div class="trial-actions">
-        <p id="prepareHint" role="status">손바닥을 보여주면 곧 시작해요.</p>
+        <p class="legacy-only" id="prepareHint" role="status">손바닥을 보여주면 곧 시작해요.</p>
+        <div class="guided-only guide-prep">
+            <div id="guidePrepStatus" role="status" aria-atomic="true">
+                <p id="guidePrepTitle"></p>
+                <p id="guidePrepDetail"></p>
+            </div>
+            <button type="button" class="btn btn-primary" id="guideStart" disabled>따라 하기 시작</button>
+            <p id="guideArmedHint" hidden>손바닥이 확인되면 시작해요.</p>
+        </div>
         <p id="trialStatus" role="status"></p>
         <button type="button" class="btn btn-primary" id="retryButton" hidden>다시 시도</button>
     </div>
@@ -164,14 +202,19 @@
 
 <div class="screen" id="screenResult">
     <div class="result-card">
-        <h2>📊 CAPTCHA 결과</h2>
-        <div class="score-row"><span class="label">전환 구간</span><span class="value" id="resSegments">-</span></div>
-        <div class="score-row"><span class="label">인식 프레임</span><span class="value" id="resDetection">-</span></div>
-        <div class="score-row"><span class="label">DTW-관절 (×0.38)</span><span class="value" id="resDtwAngle">-</span></div>
-        <div class="score-row"><span class="label">Accel (×0.37)</span><span class="value" id="resAccel">-</span></div>
-        <div class="score-row"><span class="label">관절 (×0.25)</span><span class="value" id="resAngle">-</span></div>
+        <h2 id="resultTitle" tabindex="-1">📊 CAPTCHA 결과</h2>
+        <div class="result-metrics" id="resultMetrics">
+            <div class="score-row"><span class="label">전환 구간</span><span class="value" id="resSegments">-</span></div>
+            <div class="score-row"><span class="label">인식 프레임</span><span class="value" id="resDetection">-</span></div>
+            <div class="score-row"><span class="label">DTW-관절 (×0.38)</span><span class="value" id="resDtwAngle">-</span></div>
+            <div class="score-row"><span class="label">Accel (×0.37)</span><span class="value" id="resAccel">-</span></div>
+            <div class="score-row"><span class="label">관절 (×0.25)</span><span class="value" id="resAngle">-</span></div>
+        </div>
         <div class="score-final"><span>최종 CAPTCHA 점수</span><span id="resFinal">-</span></div>
         <div class="verdict" id="verdict"></div>
+        <details class="guided-only result-details" id="guideResultDetails">
+            <summary>자세한 점수 보기</summary>
+        </details>
         <div class="btn-row">
             <button type="button" class="btn btn-primary" onclick="location.reload()">다시 시작하기</button>
             <button type="button" class="btn btn-secondary" id="downloadResult">결과 데이터 다운로드</button>
